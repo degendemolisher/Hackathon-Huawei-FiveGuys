@@ -1,4 +1,37 @@
-# Objective (Eq. 1):
+# Problem Formulation
+
+## Decision-maker:
+There is one decision-maker who is in charge of four data-centers.
+
+## Data-centers (Table 1):
+Each data-center has four attributes as listed in Table1.The data-center data can be found in the file “datacenters.csv”.
+
+Attribute | Explanation | Variable
+--- | --- | ---
+Data-center ID | This is a unique data-center ID. | k
+Cost of Energy | This is the electricity price per kilowatt per time-step. | h
+Latency Sensitivity | This is the time it takes for data to travel from its source to the data-center and back. Latency sensitivity is divided into three categories: low, medium, and high. | i
+Slots Capacity | A slot is a unit of space designed to hold a server in place. A server can occupy two or more slots. | V
+
+## Servers (Table 2):
+All data-centers can host a variety of servers. There are two types of servers: CPU, and GPU servers. As technology advances, new servers are available for purchase at certain time-steps. Each server has 12 attributes as listed in Table 2. The server data can be found in the file “servers.csv”. Servers' selling prices are stored in the file “selling_prices.csv”.
+
+Attribute | Explanation | Variable
+--- | --- | ---
+Server ID | This is a unique ID related to each server. | s
+Server Generation | As technology advances, new servers are available for purchase at certain time-steps. This is the unique ID of a generation of servers. There are four generations of CPU servers, and three generations of GPU servers. | g
+Server Type | The server type can be: CPU or GPU. | 
+Capacity | The capacity has a different unit of measurement for each server type. CPU servers capacity is measured in number of CPUs; GPU servers capacity is measured in number of GPU cards. | z
+Release Time | Time-steps at which the server is available for purchase. | 
+Purchase Price | This is the server price. | r
+Slots Size | This is the number of slots occupied by the server. | v
+Energy Consumption | This is the server energy consumption in terms of kilowatt per time-step. | ê
+Cost of Moving | This is the cost required to move a server from one data-center to another. | m
+Operating Time | This is the number of time-steps since the server has been deployed. | x
+Life Expectancy | This is the maximum number of time-steps that the server can be used before to be dismissed. | x̂
+Selling Price | This is the selling price for each unit of measurement of a given server generation. | p
+
+## Objectives (Eq. 1):
 At each time-step, the decision-maker wants to maximize the objective function defined in Eq. 1. This function consists of three sub-objectives: the servers' utilization $U$ (Eq. 2), the normalized servers' lifespan $L$ (Eq. 3), and the profit $P$ (Eq. 4).
 
 $$
@@ -83,8 +116,16 @@ $$
 V_k \geq \sum_{s \in S_k} v_{s,k} \quad \forall k
 $$
 
-## Actions
+## Actions:
 At each time-step, the decision-maker can take four actions to maximize the objective function. These actions are detailed in Table 3. Again, at each time-step the decision-maker can take as many actions as needed. As an example, at time-step 1 the decision-maker may choose to buy 50 CPU servers for data-center 1 and 10 GPU servers for data-center 2.
 
-## Timeline
+## Timeline:
 Timeline. The timeline consists of 168 discrete time-steps. At time-step 0 data-centers are empty.
+
+## Solution Evaluation (Eq. 6):
+Solutions are evaluated according to the cumulative score achieved through Eq. 6 over all the time-steps $T$. Solutions that violate the constraint are discarded.
+
+$$
+O = \sum_{t = 1}^{T} U_t \times L_t \times P_t
+$$
+
