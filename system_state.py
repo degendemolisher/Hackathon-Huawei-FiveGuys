@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 
+
 class SystemState:
     """
     Represents the current state of the data center system.
@@ -15,9 +16,11 @@ class SystemState:
         performance_metrics (dict): Dictionary storing current U, L, and P metrics.
         action_history (list): List of all actions taken in the simulation (solution).
     """
+
+
     def __init__(self, datacenters):
         self.time_step = 0
-        self.fleet = pd.DataFrame(columns=['datacenter_id', 'server_generation', 'server_id', 'action'])
+        self.fleet = pd.DataFrame(columns=['datacenter_id', 'server_generation', 'server_id', 'time_step_of_purchase', 'action']) # TODO: Add more info
         
         # Track datacenters' capacity
         self.datacenter_capacity = datacenters[['datacenter_id', 'slots_capacity']].copy()
@@ -26,6 +29,7 @@ class SystemState:
         self.performance_metrics = {'U': 0, 'L': 0, 'P': 0}
         self.action_history = []
 
+
     def apply_complex_action(self, action_dict):
         """
         Applies a complex action to the current state.
@@ -33,8 +37,7 @@ class SystemState:
         action_dict = {
             'buy': [{'datacenter_id': 'DC1', 'server_generation': 'CPU.S1', 'count': 2}, ...],
             'move': [{'from': 'DC1', 'to': 'DC2', 'server_id': 'xyz123', ...}],
-            'dismiss': ['server_id1', 'server_id2', ...],
-            'hold': ['server_id3', 'server_id4', ...]
+            'dismiss': ['server_id1', 'server_id2', ...]
         }
         """
         # TODO:
@@ -42,8 +45,10 @@ class SystemState:
         # Update fleet, datacenter capacities, and log actions
         pass
     
+
     def update_time(self):
         self.time_step += 1
+
 
     def update_metrics(self, **kwargs):
         """
@@ -69,6 +74,7 @@ class SystemState:
                 case _:
                     raise ValueError(f"Invalid metric: {metric}. Valid metrics are U, L, and P.")
 
+
     def log_action(self, datacenter_id, server_generation, server_id, action):
         """
         Logs an action taken in the simulation.
@@ -88,6 +94,7 @@ class SystemState:
         }
 
         self.action_history.append(action_data)
+
 
     def get_formatted_action_history(self):
         return json.dumps(self.action_history)
