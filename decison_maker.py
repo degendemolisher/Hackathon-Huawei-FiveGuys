@@ -1,6 +1,6 @@
 import pandas as pd
-
 import system_state
+
 
 class DecisonMaker:
     def __init__(self, servers: pd.DataFrame, datacenters: pd.DataFrame, demand: pd.DataFrame):
@@ -19,11 +19,11 @@ class DecisonMaker:
 
         # 3. Server purchase decisions
         for datacenter in self.datacenters.itertuples():
-            current_capacity = self.calculate_current_capacity(state, datacenter.datacenter_id)
-            if required_capacity[datacenter.datacenter_id] > current_capacity:
+            available_capacity = self.calculate_available_capacity(state, datacenter.datacenter_id)
+            if required_capacity[datacenter.datacenter_id] > available_capacity:
                 servers_to_buy = self.decide_servers_to_buy(
                     datacenter, 
-                    required_capacity[datacenter.datacenter_id] - current_capacity,
+                    required_capacity[datacenter.datacenter_id] - available_capacity,
                     time_step
                 )
                 action_dict['buy'].extend(servers_to_buy)
@@ -38,12 +38,45 @@ class DecisonMaker:
 
         return action_dict
 
-    def calculate_required_capacity(self, forecasted_demand):
-        # Calculate required capacity for each datacenter
-        pass
+    def calculate_required_capacity(self, forecasted_demand: pd.DataFrame) -> dict:
+        """
+        Calculate required capacity for each datacenter, prioritizing datacenters with lower energy costs.
+        
+        Parameters:
+        - forecasted_demand: DataFrame with columns [time_step, latency_sensitivity, CPU.S1, CPU.S2, CPU.S3, CPU.S4, GPU.S1, GPU.S2, GPU.S3]
+        
+        Returns:
+        - dict: A dictionary with datacenter IDs as keys and required capacity as values
+        """
 
-    def calculate_current_capacity(self, state, datacenter_id):
-        # Calculate current capacity of a datacenter
+        # Main logic:
+        # 1. Calculate total demand for each latency sensitivity
+        #    Sum up demand for all server generations for each latency sensitivity
+        
+        # 2. Initialize a dictionary to store required capacity for each datacenter
+        
+        # 3. Iterate through datacenters:
+        #    a. Get the latency sensitivity for the current datacenter
+        #    b. Get the total demand for this latency sensitivity
+        #    c. Calculate the number of servers needed to meet this demand:
+        #       - For each server generation compatible with this latency:
+        #         * Calculate how many servers of this type are needed
+        #         * Choose the most efficient server type (considering capacity and energy consumption)
+        #       - Sum up the slot sizes needed for these servers
+        #    d. Check if the calculated capacity exceeds the datacenter's slot capacity:
+        #       - If yes, fill to maximum and move excess to next datacenter
+        #       - If no, assign the calculated capacity
+        
+        # 4. After assigning capacities, check if any demand is left unassigned
+        #    If yes, try to assign to any datacenter with remaining capacity, 
+        #    prioritizing by energy cost
+        
+        # 5. Return the dictionary of required capacities
+
+        return required_capacities
+
+    def calculate_available_capacity(self, state, datacenter_id):
+        # Calculate available capacity of a datacenter
         pass
 
     def decide_servers_to_buy(self, datacenter, capacity_needed, time_step):
