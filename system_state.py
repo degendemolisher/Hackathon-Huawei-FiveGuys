@@ -19,8 +19,15 @@ class SystemState:
 
 
     def __init__(self, datacenters: pd.DataFrame, servers: pd.DataFrame):
-        self.time_step = 0
-        self.fleet = pd.DataFrame(columns=['datacenter_id', 'server_generation', 'server_id', 'time_step_of_purchase'])
+        self.time_step = 1
+        self.fleet = pd.DataFrame(columns=[
+            'datacenter_id', 
+            'server_generation', 
+            'server_id',
+            # 'time_step_of_purchase',
+            'lifespan' # UGLY CODE WARNING
+            # 'latency_sensitivity'
+        ])
         
         # Track datacenters' slot capacity
         self.datacenter_capacity = datacenters[['datacenter_id', 'slots_capacity']].copy()
@@ -30,12 +37,13 @@ class SystemState:
         self.solution = []
 
         self.servers_info = servers
+        self.datacenter_info = datacenters
 
 
     def update_state(self, decision):
         """
         Update the system state based on a given decision.
-        
+
         Warning:
             TIME SHOULD BE UPDATED FIRST!
         """
@@ -92,15 +100,25 @@ class SystemState:
         """
         for decision in decisions:
             if decision['action'] == 'buy':
+                latency_sensitivity = self.datacenter_info.loc[
+                    self.datacenter_info['datacenter_id'] == decision['datacenter_id'], 
+                    'latency_sensitivity'
+                ].iloc[0]
+
                 new_server = pd.DataFrame({
                     'datacenter_id': [decision['datacenter_id']],
                     'server_generation': [decision['server_generation']],
                     'server_id': [decision['server_id']],
-                    'time_step_of_purchase': [self.time_step]
+                    # 'time_step_of_purchase': [self.time_step],
+                    'lifespan': [0] # UGLY CODE WARNING
+                    # 'latency_sensitivity': [latency_sensitivity]
                 })
+
                 self.fleet = pd.concat([self.fleet, new_server], ignore_index=True)
+
             elif decision['action'] == 'dismiss':
                 self.fleet = self.fleet[self.fleet['server_id'] != decision['server_id']]
+
             elif decision['action'] == 'move':
                 self.fleet.loc[self.fleet['server_id'] == decision['server_id'], 'datacenter_id'] = decision['datacenter_id']
 
@@ -136,17 +154,26 @@ class SystemState:
         
         # Update used slots in datacenter_capacity
         for _, row in datacenter_slots.iterrows():
-            dc = self.datacenter_capacity.loc[self.datacenter_capacity['datacenter_id'] == row['datacenter_id']]
+            dc_capacity = self.datacenter_capacity.loc[
+                self.datacenter_capacity['datacenter_id'] == row['datacenter_id'], 
+                'slots_capacity'
+            ].iloc[0]  # Get the single value
             
             # Ensure capacity constraints are not violated
-            if row['used_slots'] <= dc['slots_capacity']:
-                dc['used_slots'] = row['used_slots']
+            if row['used_slots'] <= dc_capacity:
+                self.datacenter_capacity.loc[
+                    self.datacenter_capacity['datacenter_id'] == row['datacenter_id'], 
+                    'used_slots'
+                ] = row['used_slots']
             else:
-                raise ValueError("Datacenter capacity exceeded")
+                raise ValueError(f"Datacenter '{row['datacenter_id']}': capacity exceeded")
 
-
+    # UGLY CODE WARNING
     def update_time(self):
         self.time_step += 1
+
+        for _, server in self.fleet.iterrows():
+            server['lifespan'] += 1
 
 
     def update_metrics(self, **kwargs):
@@ -173,9 +200,9 @@ class SystemState:
                 case _:
                     raise ValueError(f"Invalid metric: {metric}. Valid metrics are U, L, and P.")
 
-
-    def get_server_ages(self) -> pd.Series:
-        return self.fleet['time_step_of_purchase'].apply(lambda x: self.time_step - x)
+    # I WANT TO CRY
+    # def get_server_ages(self) -> pd.Series:
+    #     return self.fleet['time_step_of_purchase'].apply(lambda x: self.time_step - x)
 
 
     def get_formatted_solution(self):
