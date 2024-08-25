@@ -1,6 +1,8 @@
 import json
 import pandas as pd
 
+from evaluation import *
+
 
 class SystemState:
     """
@@ -20,14 +22,20 @@ class SystemState:
 
     def __init__(self, datacenters: pd.DataFrame, servers: pd.DataFrame):
         self.time_step = 1
-        self.fleet = pd.DataFrame(columns=[
-            'datacenter_id', 
-            'server_generation', 
-            'server_id',
-            # 'time_step_of_purchase',
-            'lifespan' # UGLY CODE WARNING
-            # 'latency_sensitivity'
-        ])
+        self.fleet = pd.DataFrame({
+            'datacenter_id':           pd.Series(dtype='string'),
+            'server_generation':       pd.Series(dtype='string'),
+            'server_id':               pd.Series(dtype='string'),
+            'lifespan':                pd.Series(dtype='int'),
+            'life_expectancy':         pd.Series(dtype='int'),
+            'latency_sensitivity':     pd.Series(dtype='string'),
+            'capacity':                pd.Series(dtype='int'),
+            'purchase_price':          pd.Series(dtype='int'),
+            'average_maintenance_fee': pd.Series(dtype='int'),
+            'energy_consumption':      pd.Series(dtype='int'),
+            'cost_of_energy':          pd.Series(dtype='int'),
+            'moved':                   pd.Series(dtype='int')
+        })
         
         # Track datacenters' slot capacity
         self.datacenter_capacity = datacenters[['datacenter_id', 'slots_capacity']].copy()
@@ -89,7 +97,7 @@ class SystemState:
     def update_fleet(self, decisions):
         """
         Update the server fleet based on the given decisions.
-
+        
         Args:
             decisions (list of dict): A list of decision dictionaries. Each dictionary
                 should contain the following keys:
@@ -98,29 +106,66 @@ class SystemState:
                 - 'server_generation': str, the generation of the server
                 - 'server_id': str, the unique ID of the server
         """
+        buy_decisions = []
+        dismiss_server_ids = []
+        move_decisions = []
+
         for decision in decisions:
             if decision['action'] == 'buy':
-                latency_sensitivity = self.datacenter_info.loc[
-                    self.datacenter_info['datacenter_id'] == decision['datacenter_id'], 
-                    'latency_sensitivity'
-                ].iloc[0]
-
-                new_server = pd.DataFrame({
-                    'datacenter_id': [decision['datacenter_id']],
-                    'server_generation': [decision['server_generation']],
-                    'server_id': [decision['server_id']],
-                    # 'time_step_of_purchase': [self.time_step],
-                    'lifespan': [0] # UGLY CODE WARNING
-                    # 'latency_sensitivity': [latency_sensitivity]
-                })
-
-                self.fleet = pd.concat([self.fleet, new_server], ignore_index=True)
-
+                buy_decisions.append(decision)
             elif decision['action'] == 'dismiss':
-                self.fleet = self.fleet[self.fleet['server_id'] != decision['server_id']]
-
+                dismiss_server_ids.append(decision['server_id'])
             elif decision['action'] == 'move':
-                self.fleet.loc[self.fleet['server_id'] == decision['server_id'], 'datacenter_id'] = decision['datacenter_id']
+                move_decisions.append(decision)
+
+        if buy_decisions:
+            buy_df = pd.DataFrame(buy_decisions)
+            
+            # Merge with datacenter_info to get latency_sensitivity
+            buy_df = buy_df.merge(
+                self.datacenter_info, 
+                on='datacenter_id', how='left'
+            )
+            
+            # Merge with servers_info to get capacity
+            buy_df = buy_df.merge(
+                self.servers_info, 
+                on='server_generation', how='left'
+            )
+            # 3/4 columns from datacenetrs.csv
+            # 7/10 columns from servers.csv
+            # Create DataFrame for new servers
+            new_servers = pd.DataFrame({
+                'datacenter_id':           buy_df['datacenter_id'],
+                'server_generation':       buy_df['server_generation'],
+                'server_id':               buy_df['server_id'],
+                'lifespan':                0,
+                'life_expectancy':         buy_df['life_expectancy'],
+                'latency_sensitivity':     buy_df['latency_sensitivity'],
+                'capacity':                buy_df['capacity'],
+                'purchase_price':          buy_df['purchase_price'],
+                'average_maintenance_fee': buy_df['average_maintenance_fee'],
+                'energy_consumption':      buy_df['energy_consumption'],
+                'cost_of_energy':          buy_df['cost_of_energy'],
+                'moved':                   0
+            })
+
+            self.fleet = pd.concat([self.fleet, new_servers], ignore_index=True)
+
+
+        if dismiss_server_ids:
+            self.fleet = self.fleet[~self.fleet['server_id'].isin(dismiss_server_ids)]
+
+        if move_decisions:
+            # Create mapping of server_id to new datacenter_id
+            move_dict = { d['server_id']: d['datacenter_id'] for d in move_decisions }
+
+            # Servers to be moved
+            move_mask = self.fleet['server_id'].isin(move_dict.keys())
+
+            # Update datacenter_id for moved servers
+            self.fleet.loc[move_mask, 'datacenter_id'] = self.fleet.loc[move_mask, 'server_id'].map(move_dict)
+            self.fleet.loc[move_mask, 'moved'] += 1
 
 
     def update_datacenter_capacity(self):
@@ -168,42 +213,68 @@ class SystemState:
             else:
                 raise ValueError(f"Datacenter '{row['datacenter_id']}': capacity exceeded")
 
-    # UGLY CODE WARNING
     def update_time(self):
         self.time_step += 1
 
-        for _, server in self.fleet.iterrows():
-            server['lifespan'] += 1
+        # Pandas vectorized operation
+        # thx Jamie for reminder
+        self.fleet['lifespan'] += 1
 
 
-    def update_metrics(self, **kwargs):
+    def update_metrics(self, U=None, L=None, P=None):
         """
-        Updates the performance metrics.
+        Update performance metrics U, L, and P.
 
         Args:
-            **kwargs: Keyword arguments for metrics to update (U, L, P).
+            U (float, optional): Utilization metric.
+            L (float, optional): Normalized lifespan metric.
+            P (float, optional): Profit metric.
 
         Raises:
-            ValueError: If no valid metrics are provided or if an invalid metric is given.
+            ValueError: If no metrics are provided.
         """
-        if not kwargs:
-            raise ValueError("At least one metric (U, L, or P) must be provided for update.")
+        if U is None and L is None and P is None:
+            raise ValueError("At least one metric (U, L, or P) must be provided.")
         
-        for metric, value in kwargs.items():
-            match metric:
-                case 'U':
-                    self.performance_metrics['U'] = value
-                case 'L':
-                    self.performance_metrics['L'] = value
-                case 'P':
-                    self.performance_metrics['P'] = value
-                case _:
-                    raise ValueError(f"Invalid metric: {metric}. Valid metrics are U, L, and P.")
-
-    # I WANT TO CRY
-    # def get_server_ages(self) -> pd.Series:
-    #     return self.fleet['time_step_of_purchase'].apply(lambda x: self.time_step - x)
+        if U is not None:
+            self.performance_metrics['U'] = U
+        if L is not None:
+            self.performance_metrics['L'] = L
+        if P is not None:
+            self.performance_metrics['P'] = P
 
 
     def get_formatted_solution(self):
         return json.dumps(self.solution)
+    
+    @staticmethod
+    def calculate_objectives(fleet: pd.DataFrame, demand: pd.DataFrame, selling_prices: pd.DataFrame, time_step: int):
+        """
+        Calculate the combined objectives (U * L * P) for a given fleet, demand, and selling prices.
+
+        Args:
+            fleet (pd.DataFrame): Current server fleet information.
+            demand (pd.DataFrame): Demand over time.
+            selling_prices (pd.DataFrame): Selling price information.
+            time_step (int): Current time step in the simulation.
+
+        Returns:
+            Product of utilization (U), normalized lifespan (L), and profit (P).
+            Returns 0 if the fleet is empty.
+        """
+        if fleet.empty:
+            return 0
+        
+        # Calculate U (utilization)
+        D = get_time_step_demand(get_actual_demand(demand), time_step)
+        Zf = get_capacity_by_server_generation_latency_sensitivity(fleet)
+        U = get_utilization(D, Zf)
+
+        # Calculate L (normalized lifespan)
+        L = get_normalized_lifespan(fleet)
+
+        # Calculate P (profit)
+        selling_prices = change_selling_prices_format(selling_prices)
+        P = get_profit(D, Zf, selling_prices, fleet)
+
+        return U * L * P
