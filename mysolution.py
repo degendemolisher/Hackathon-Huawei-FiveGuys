@@ -4,11 +4,10 @@ import pandas as pd
 from seeds import known_seeds
 from utils import save_solution
 from evaluation import get_actual_demand
+from profit import generate_solution
 
-
-def get_my_solution(d):
-    # This is just a placeholder.
-    return [{}]
+def get_my_solution(actual_demand):
+    return generate_solution(actual_demand)
 
 
 seeds = known_seeds('training')
