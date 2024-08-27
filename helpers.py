@@ -51,17 +51,13 @@ indexed_servers = servers.set_index('server_generation')
 def get_server_capacity(server_generation: str) -> int:
     return indexed_servers.loc[server_generation, 'capacity']
 
-# gets demand at time-step
-# subtract capacity at timestep
-# returns unsatisfied demand
-# stores unsatisfied demand per timestep as a dictionaries
 def get_unsatisfied_demand(timestep: int):
     # get demand at ts
         # 
     # get capacity at ts
         # 
     # subtract the capacity at ts from the demand at ts
-    
+
     # return max(0, unsatisfied demand)
     
     pass
