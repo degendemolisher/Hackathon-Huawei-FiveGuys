@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-from helpers import Action, get_available_servers, get_most_profitable, get_server_capacity
+from helpers import Action, get_available_servers, get_most_profitable, get_server_capacity, get_unsatisfied_demand
 from seeds import known_seeds
 from utils import load_problem_data, save_solution
 from evaluation import get_actual_demand, get_known
@@ -14,13 +14,13 @@ def get_my_solution(actual_demand) -> list[Action]:
 
     existing_servers = pd.DataFrame(columns=['server_id', 'time_step_bought', 'datacentre_id', 'server_type'])
     
-    for t in np.range(1,get_known('time_steps')):
+    for ts in np.range(1,get_known('time_steps')):
         # Checks the demand that needs to be satisfied
-        unsatisfied_demand = get_unsatisfied_demand()
+        unsatisfied_demand = get_unsatisfied_demand(demand, servers, ts)
         
         # Buys servers if there is unsatisfied demand
         ## which servers?
-        available_cpus, available_gpus = get_available_servers(t)
+        available_cpus, available_gpus = get_available_servers(ts)
         cpu_target = get_most_profitable(available_cpus)
         gpu_target = get_most_profitable(available_gpus)
 

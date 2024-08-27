@@ -3,6 +3,7 @@ from typing import TypedDict
 import numpy as np
 import numpy.typing as npt
 from utils import load_problem_data
+from evaluation import get_capacity_by_server_generation_latency_sensitivity, get_time_step_demand
 
 
 demand, datacenters, servers, selling_prices = load_problem_data()
@@ -49,3 +50,18 @@ def get_most_profitable(servers: list[str]) -> str:
 indexed_servers = servers.set_index('server_generation')
 def get_server_capacity(server_generation: str) -> int:
     return indexed_servers.loc[server_generation, 'capacity']
+
+# gets demand at time-step
+# subtract capacity at timestep
+# returns unsatisfied demand
+# stores unsatisfied demand per timestep as a dictionaries
+def get_unsatisfied_demand(timestep: int):
+    # get demand at ts
+        # 
+    # get capacity at ts
+        # 
+    # subtract the capacity at ts from the demand at ts
+    
+    # return max(0, unsatisfied demand)
+    
+    pass
