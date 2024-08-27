@@ -57,6 +57,6 @@ def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: list[str], time_s
     current_demand = get_time_step_demand(actual_demand, time_step)
     capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
 
-    unsatisfied_demand = demand - capacity
+    unsatisfied_demand = current_demand - capacity
 
     return max(0, unsatisfied_demand)
