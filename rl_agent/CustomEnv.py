@@ -5,6 +5,7 @@ from gymnasium import spaces
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from sb3_contrib.common.wrappers import ActionMasker
 from sb3_contrib.ppo_mask import MaskablePPO
+import seeds as s
 
 from gymnasium.wrappers import FlattenObservation # type: ignore
 class CustomEnv(gym.Env):
@@ -20,7 +21,11 @@ class CustomEnv(gym.Env):
         ##self.action_space = 
         
         #agent observation space (what the agent can "see"/information that is fed to agent)
-        ##self.observation_space = 
+        #a 3d array of latency, server_gen, demand
+        self.observation_space = spaces.Box(low=0, high=1000000, shape=(6, 7, 1), dtype=np.int32)
+
+        self.seeds_array = seeds.known_seeds("training")
+        self.seed_counter = 0
 
     #might need func below to convert agent action into a relevant action
     #def conv_agent_action_to_move(self, action):
@@ -31,6 +36,10 @@ class CustomEnv(gym.Env):
     #initiallise/reset all of the base variables at the end of the "game"
     #has to return a base/initial observation
     def reset(self, seed=None, options=None):
+        self.seed_counter += 1
+        self.seed_counter %= 10
+        seed = self.seeds_array[self.seed_counter]
+        self.timestep = 0
         self.done = False
         return observation, {}
 
