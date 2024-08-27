@@ -1,1 +1,0 @@
-seeds = known_seeds('training')
