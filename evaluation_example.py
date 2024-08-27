@@ -15,6 +15,6 @@ score = evaluation_function(solution,
                             datacenters,
                             servers,
                             selling_prices,
-                            seed=1741)
+                            seed=8933)
 
 print(f'Solution score: {score}')

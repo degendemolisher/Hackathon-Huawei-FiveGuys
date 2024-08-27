@@ -22,7 +22,7 @@ class CustomEnv(gym.Env):
         action_space =   ActionSpace()
 
         max_actions = 20
-        actions = action_space.generate_all_possible_actions(max_actions=max_actions)
+        actions = spaces.Box(low=0, high=1000000, shape=(4, 7, 4), dtype=np.int32)
 
         print(f"Generated {len(actions)} actions:")
         for action in actions:

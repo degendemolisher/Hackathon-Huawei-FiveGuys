@@ -1,1 +1,1 @@
-get_actual_demand
+seeds = known_seeds('training')
