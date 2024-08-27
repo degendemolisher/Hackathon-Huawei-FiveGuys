@@ -1,7 +1,6 @@
-from enum import Enum, auto
 from typing import TypedDict
 import numpy as np
-import numpy.typing as npt
+import pandas as pd
 from utils import load_problem_data
 from evaluation import get_capacity_by_server_generation_latency_sensitivity, get_time_step_demand
 
@@ -32,6 +31,9 @@ class Action(TypedDict):
     server_id: str
     action: str
 
+    def columns():
+        return ['time_step', 'datacenter_id', 'server_generation', 'server_id', 'action']
+
 # The number of days before the server breaks even (in DC1)
 # See the Profitability spreadsheet in the google drive
 server_profitability = {
@@ -51,14 +53,8 @@ indexed_servers = servers.set_index('server_generation')
 def get_server_capacity(server_generation: str) -> int:
     return indexed_servers.loc[server_generation, 'capacity']
 
-def get_unsatisfied_demand(actual_demand, fleet: list[str], timestep: int):
-    def get_total_demand():
-        # demand = 0
-        # for each server in fleet:
-            # demand += get the demand from actual_demand
-            pass
-
-    demand = get_total_demand()
+def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: list[str], time_step: int):
+    current_demand = get_time_step_demand(actual_demand, time_step)
     capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
 
     unsatisfied_demand = demand - capacity
