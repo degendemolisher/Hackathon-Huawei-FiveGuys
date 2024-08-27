@@ -47,6 +47,11 @@ def get_known(key):
                 'action']
     elif key == 'time_steps':
         return 168
+    elif key == 'datacenter_fields':
+        return ['datacenter_id', 
+                'cost_of_energy',
+                'latency_sensitivity', 
+                'slots_capacity']
 
 
 def solution_data_preparation(solution, servers, datacenters, selling_prices):
@@ -211,7 +216,7 @@ def adjust_capacity_by_failure_rate(x):
 def check_datacenter_slots_size_constraint(fleet):
     # CHECK DATACENTERS SLOTS SIZE CONSTRAINT
     slots = fleet.groupby(by=['datacenter_id']).agg({'slots_size': 'sum',
-                                                        'slots_capacity': 'mean'})
+                                                     'slots_capacity': 'mean'})
     test = slots['slots_size'] > slots['slots_capacity']
     constraint = test.any()
     if constraint:
@@ -268,12 +273,13 @@ def get_revenue(D, Z, selling_prices):
 
 
 def get_cost(fleet):
-    # CALCULATE THE COST
+    # CALCULATE THE SERVER COST - PART 1
     fleet['cost'] = fleet.apply(calculate_server_cost, axis=1)
     return fleet['cost'].sum()
 
 
 def calculate_server_cost(row):
+    # CALCULATE THE SERVER COST - PART 2
     c = 0
     r = row['purchase_price']
     b = row['average_maintenance_fee']
@@ -291,10 +297,12 @@ def calculate_server_cost(row):
 
 
 def get_maintenance_cost(b, x, xhat):
+    # CALCULATE THE CURRENT MAINTENANCE COST
     return b * (1 + (((1.5)*(x))/xhat * np.log2(((1.5)*(x))/xhat)))
 
 
 def update_fleet(ts, fleet, solution):
+    # UPADATE THE FLEET ACCORDING TO THE ACTIONS AT THE CURRENT TIMESTEP
     if fleet.empty:
         fleet = solution.copy()
         fleet['lifespan'] = 0
@@ -307,7 +315,9 @@ def update_fleet(ts, fleet, solution):
         # MOVE
         if 'move' in server_id_action:
             s = server_id_action['move']
-            fleet.loc[s, 'datacenter_id'] = solution.loc[s, 'datacenter_id']
+            dc_fields = get_known('datacenter_fields')
+            fleet.loc[s, dc_fields] = solution.loc[s, dc_fields]
+            fleet.loc[s, 'selling_price'] = solution.loc[s, 'selling_price']
             fleet.loc[s, 'moved'] = 1
         # HOLD
             # do nothing
@@ -320,13 +330,16 @@ def update_fleet(ts, fleet, solution):
 
 def put_fleet_on_hold(fleet):
     fleet['action'] = 'hold'
+    fleet['moved'] = 0
     return fleet
 
 
 def update_check_lifespan(fleet):
+    # INCREASE LIFESPAN COUNTER AND DROP SERVERS THAT HAVE ACHIEVED THEIR
+    # LIFE EXPECTANCY
     fleet['lifespan'] = fleet['lifespan'].fillna(0)
     fleet['lifespan'] += 1
-    fleet = fleet.drop(fleet.index[fleet['lifespan'] >= fleet['life_expectancy']], inplace=False)
+    fleet = fleet.drop(fleet.index[fleet['lifespan'] > fleet['life_expectancy']], inplace=False)
     return fleet
 
 
@@ -350,7 +363,6 @@ def get_evaluation(solution,
 
     # DEMAND DATA PREPARATION
     demand = get_actual_demand(demand)
-
     OBJECTIVE = 0
     FLEET = pd.DataFrame()
     # if ts-related fleet is empty then current fleet is ts-fleet
@@ -384,12 +396,12 @@ def get_evaluation(solution,
             L = get_normalized_lifespan(FLEET)
     
             P = get_profit(D, 
-                            Zf, 
-                            selling_prices,
-                            FLEET)
+                           Zf, 
+                           selling_prices,
+                           FLEET)
             o = U * L * P
             OBJECTIVE += o
-            
+
             # PUT ENTIRE FLEET on HOLD ACTION
             FLEET = put_fleet_on_hold(FLEET)
 
@@ -409,7 +421,7 @@ def get_evaluation(solution,
 
         if verbose:
             print(output)
-
+            
     return OBJECTIVE
 
 

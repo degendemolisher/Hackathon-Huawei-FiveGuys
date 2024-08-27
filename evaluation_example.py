@@ -1,5 +1,3 @@
-
-
 from utils import (load_problem_data,
                    load_solution)
 from evaluation import evaluation_function
