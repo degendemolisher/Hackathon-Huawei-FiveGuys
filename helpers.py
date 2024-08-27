@@ -56,6 +56,7 @@ def get_unsatisfied_demand(actual_demand, fleet: list[str], timestep: int):
         # demand = 0
         # for each server in fleet:
             # demand += get the demand from actual_demand
+            pass
 
     demand = get_total_demand()
     capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
