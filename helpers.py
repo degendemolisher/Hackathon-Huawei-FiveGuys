@@ -51,13 +51,15 @@ indexed_servers = servers.set_index('server_generation')
 def get_server_capacity(server_generation: str) -> int:
     return indexed_servers.loc[server_generation, 'capacity']
 
-def get_unsatisfied_demand(timestep: int):
-    # get demand at ts
-        # 
-    # get capacity at ts
-        # 
-    # subtract the capacity at ts from the demand at ts
+def get_unsatisfied_demand(actual_demand, fleet: list[str], timestep: int):
+    def get_total_demand():
+        # demand = 0
+        # for each server in fleet:
+            # demand += get the demand from actual_demand
 
-    # return max(0, unsatisfied demand)
-    
-    pass
+    demand = get_total_demand()
+    capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
+
+    unsatisfied_demand = demand - capacity
+
+    return max(0, unsatisfied_demand)

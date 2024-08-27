@@ -16,7 +16,7 @@ def get_my_solution(actual_demand) -> list[Action]:
     
     for ts in np.range(1,get_known('time_steps')):
         # Checks the demand that needs to be satisfied
-        unsatisfied_demand = get_unsatisfied_demand(demand, servers, ts)
+        unsatisfied_demand = get_unsatisfied_demand(actual_demand, existing_servers, ts)
         
         # Buys servers if there is unsatisfied demand
         ## which servers?
@@ -27,7 +27,7 @@ def get_my_solution(actual_demand) -> list[Action]:
         ## how many?
         cpu_capacity = get_server_capacity(cpu_target)
         gpu_capacity = get_server_capacity(gpu_target)
-        
+
 
         pass
 
