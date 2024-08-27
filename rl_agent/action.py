@@ -3,9 +3,7 @@ from collections import deque
 
 class ActionSpace:
     def __init__(self):
-        """
-        Initialize the ActionSpace with predefined operations, server generations, and data centers.
-        """
+    
         self.operation_types = ['buy', 'move', 'dismiss', 'hold']
         self.server_generations = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4',
                                    'GPU.S1', 'GPU.S2', 'GPU.S3']
@@ -21,23 +19,22 @@ class ActionSpace:
 
     def generate_server_id(self, server_generation):
         """
-        Generate IDs like CPU.S1_1, GPU.S2_3 for FIFO approach.
-        :return: A unique server ID string
+         IDs like CPU.S1_1, GPU.S2_3 for FIFO approach.
+
         """
         self.server_id_counters[server_generation] += 1
         return f"{server_generation}_{self.server_id_counters[server_generation]}"
 
     def convert_actionspace_to_action(self, action_space):
         """
-        Convert the action space (defined as Box) into meaningful actions.
-        :param action_space: The action space array from the RL environment.
-        :return: The corresponding action tuples.
+          action space (defined as Box) into meaningful actions.
+
         """
         actions = []
 
-        for op_index in range(action_space.shape[0]):  # Loop through operation types
-            for sg_index in range(action_space.shape[1]):  # Loop through server generations
-                for dc_index in range(action_space.shape[2]):  # Loop through data centers
+        for op_index in range(action_space.shape[0]):   
+            for sg_index in range(action_space.shape[1]):  
+                for dc_index in range(action_space.shape[2]):  
                     if action_space[op_index, sg_index, dc_index] > 0:
                         operation = self.operation_types[op_index]
                         server_generation = self.server_generations[sg_index]
@@ -60,26 +57,23 @@ class ActionSpace:
                                 # Last-In-First-Out (LIFO) for move
                                 server_id = self.existing_servers[data_center][server_generation].pop()
                             else:
-                                continue  # No server to move, skip action
-                            # You would typically then move this server to a different data center
-                            # This example does not reassign the data center, just demonstrating LIFO
+                                continue  
 
                         elif operation == 'hold':
                             if self.existing_servers[data_center][server_generation]:
                                 server_id = self.existing_servers[data_center][server_generation][-1]
                             else:
-                                continue  # No server to hold, skip action
+                                continue   
 
                         action = self.create_action(operation, server_generation, server_id, data_center)
                         actions.append(action)
 
         return actions
 
-# Example usage of convert_actionspace_to_action:
 if __name__ == "__main__":
     action_space = ActionSpace()
     
-    # Example action space input from the environment
+    
     rl_action_space = np.random.randint(0, 2, size=(4, 7, 4))
     
     actions = action_space.convert_actionspace_to_action(rl_action_space)
