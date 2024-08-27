@@ -6,6 +6,7 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from sb3_contrib.common.wrappers import ActionMasker
 from sb3_contrib.ppo_mask import MaskablePPO
 import seeds as s
+from action import ActionSpace
 
 from gymnasium.wrappers import FlattenObservation # type: ignore
 class CustomEnv(gym.Env):
@@ -18,8 +19,15 @@ class CustomEnv(gym.Env):
         """
 
         #agent action space (actions it can make)
-        ##self.action_space = 
-        
+        action_space =   ActionSpace()
+
+        max_actions = 20
+        actions = action_space.generate_all_possible_actions(max_actions=max_actions)
+
+        print(f"Generated {len(actions)} actions:")
+        for action in actions:
+            print(action)
+            
         #agent observation space (what the agent can "see"/information that is fed to agent)
         #a 3d array of latency, server_gen, demand
         self.observation_space = spaces.Box(low=0, high=1000000, shape=(6, 7, 1), dtype=np.int32)
