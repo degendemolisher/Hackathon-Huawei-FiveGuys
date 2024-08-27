@@ -1,4 +1,4 @@
-import itertools
+import numpy as np
 from collections import deque
 
 class ActionSpace:
@@ -11,7 +11,7 @@ class ActionSpace:
                                    'GPU.S1', 'GPU.S2', 'GPU.S3']
         self.data_centers = ['DC1', 'DC2', 'DC3', 'DC4']
         self.server_id_counters = {gen: 0 for gen in self.server_generations}
-        self.existing_servers = {dc: deque() for dc in self.data_centers}
+        self.existing_servers = {dc: {gen: deque() for gen in self.server_generations} for dc in self.data_centers}
 
     def create_action(self, operation, server_generation, server_id, data_center):
         """
@@ -27,82 +27,62 @@ class ActionSpace:
         self.server_id_counters[server_generation] += 1
         return f"{server_generation}_{self.server_id_counters[server_generation]}"
 
-    def generate_all_possible_actions(self, max_actions=None):
+    def convert_actionspace_to_action(self, action_space):
         """
-        Generate all possible actions based on the current server inventory.
-        
-        :param max_actions: Maximum number of actions to generate.
-        :return: List of all possible actions
+        Convert the action space (defined as Box) into meaningful actions.
+        :param action_space: The action space array from the RL environment.
+        :return: The corresponding action tuples.
         """
-        all_actions = []
-        
-        for operation in self.operation_types:
-            if operation == 'buy':
-                for server_gen in self.server_generations:
-                    for dc in self.data_centers:
-                        action = self.create_action(operation, server_gen, '<new_id>', dc)
-                        all_actions.append(action)
-                        if max_actions and len(all_actions) >= max_actions:
-                            return all_actions
+        actions = []
 
-            elif operation == 'move':
-                for dc_from in self.data_centers:
-                    for server_gen, server_id in list(self.existing_servers[dc_from]):
-                        for dc_to in self.data_centers:
-                            if dc_from != dc_to:
-                                action = self.create_action(operation, server_gen, server_id, dc_to)
-                                all_actions.append(action)
-                                if max_actions and len(all_actions) >= max_actions:
-                                    return all_actions
+        for op_index in range(action_space.shape[0]):  # Loop through operation types
+            for sg_index in range(action_space.shape[1]):  # Loop through server generations
+                for dc_index in range(action_space.shape[2]):  # Loop through data centers
+                    if action_space[op_index, sg_index, dc_index] > 0:
+                        operation = self.operation_types[op_index]
+                        server_generation = self.server_generations[sg_index]
+                        data_center = self.data_centers[dc_index]
 
-            elif operation == 'dismiss':
-                for dc in self.data_centers:
-                    if self.existing_servers[dc]:
-                        server_gen, server_id = self.existing_servers[dc].popleft()
-                        action = self.create_action(operation, server_gen, server_id, dc)
-                        all_actions.append(action)
-                        if max_actions and len(all_actions) >= max_actions:
-                            return all_actions
+                        if operation == 'buy':
+                            server_id = self.generate_server_id(server_generation)
+                            # Add the server to the data center inventory
+                            self.existing_servers[data_center][server_generation].append(server_id)
+                        
+                        elif operation == 'dismiss':
+                            if self.existing_servers[data_center][server_generation]:
+                                # First-In-First-Out (FIFO) for dismiss
+                                server_id = self.existing_servers[data_center][server_generation].popleft()
+                            else:
+                                continue  # No server to dismiss, skip action
 
-            elif operation == 'hold':
-                for dc in self.data_centers:
-                    for server_gen, server_id in self.existing_servers[dc]:
-                        action = self.create_action(operation, server_gen, server_id, dc)
-                        all_actions.append(action)
-                        if max_actions and len(all_actions) >= max_actions:
-                            return all_actions
+                        elif operation == 'move':
+                            if self.existing_servers[data_center][server_generation]:
+                                # Last-In-First-Out (LIFO) for move
+                                server_id = self.existing_servers[data_center][server_generation].pop()
+                            else:
+                                continue  # No server to move, skip action
+                            # You would typically then move this server to a different data center
+                            # This example does not reassign the data center, just demonstrating LIFO
 
-        return all_actions[:max_actions] if max_actions else all_actions
+                        elif operation == 'hold':
+                            if self.existing_servers[data_center][server_generation]:
+                                server_id = self.existing_servers[data_center][server_generation][-1]
+                            else:
+                                continue  # No server to hold, skip action
 
-def test_action_space():
+                        action = self.create_action(operation, server_generation, server_id, data_center)
+                        actions.append(action)
+
+        return actions
+
+# Example usage of convert_actionspace_to_action:
+if __name__ == "__main__":
     action_space = ActionSpace()
- 
-    print("Test 1: max_actions=10")
-    actions_10 = action_space.generate_all_possible_actions(max_actions=10)
-    print(f"Number of actions generated: {len(actions_10)}")
-    for action in actions_10:
+    
+    # Example action space input from the environment
+    rl_action_space = np.random.randint(0, 2, size=(4, 7, 4))
+    
+    actions = action_space.convert_actionspace_to_action(rl_action_space)
+    
+    for action in actions:
         print(action)
-
-    # Test 2: Generate with a larger max_actions limit
-    print("\nTest 2: max_actions=50")
-    actions_50 = action_space.generate_all_possible_actions(max_actions=50)
-    print(f"Number of actions generated: {len(actions_50)}")
-    for action in actions_50:
-        print(action)
-
-    # Test 3: Check if actions are relevant and within the limit
-    assert len(actions_10) <= 10, "Test 1 failed: More than 10 actions generated"
-    assert len(actions_50) <= 50, "Test 2 failed: More than 50 actions generated"
-
-    print("\nAll tests passed!")
-
-# Run the test function
-test_action_space()
-
-# Example Usage
-action_space = ActionSpace()
-limited_actions = action_space.generate_all_possible_actions(max_actions=50)
-
-# Print actions to verify
-for action in limited_actions:
-    print(action)

@@ -156,7 +156,7 @@ for seed_value in seeds:
                 "datacenter_id": next(item['datacenter_id'] for item in actions if item['server_id'] == server_id),
                     "server_generation": server_generation,
                     "server_id": server_id,
-                    "action": "dismiss"
+                    "action": "buy"
                 }
                 actions.append(action)
                 datacenter_slots[action['datacenter_id']] -= server_info['slots_size']
