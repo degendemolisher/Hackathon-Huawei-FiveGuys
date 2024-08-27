@@ -21,7 +21,7 @@ class SystemState:
 
 
     def __init__(self, datacenters: pd.DataFrame, servers: pd.DataFrame):
-        self.time_step = 1
+        self.time_step = 0
         self.fleet = pd.DataFrame({
             'datacenter_id':           pd.Series(dtype='string'),
             'server_generation':       pd.Series(dtype='string'),
@@ -40,6 +40,7 @@ class SystemState:
         # Track datacenters' slot capacity
         self.datacenter_capacity = datacenters[['datacenter_id', 'slots_capacity']].copy()
         self.datacenter_capacity['used_slots'] = 0
+        self.datacenter_capacity['total_capacity'] = 0
 
         self.performance_metrics = {'U': 0, 'L': 0, 'P': 0}
         self.solution = []
@@ -86,11 +87,12 @@ class SystemState:
         """
         for decision in decisions:
             self.solution.append({
-                "time_step": self.time_step,
-                "datacenter_id": decision["datacenter_id"],
-                "server_generation": decision["server_generation"],
-                "server_id": decision["server_id"],
-                "action": decision["action"]
+                'time_step': self.time_step,
+                **decision
+                # "datacenter_id": decision["datacenter_id"],
+                # "server_generation": decision["server_generation"],
+                # "server_id": decision["server_id"],
+                # "action": decision["action"]
             })
     
 
@@ -121,13 +123,13 @@ class SystemState:
         if buy_decisions:
             buy_df = pd.DataFrame(buy_decisions)
             
-            # Merge with datacenter_info to get latency_sensitivity
+            # Merge with datacenter_info
             buy_df = buy_df.merge(
                 self.datacenter_info, 
                 on='datacenter_id', how='left'
             )
             
-            # Merge with servers_info to get capacity
+            # Merge with servers_info
             buy_df = buy_df.merge(
                 self.servers_info, 
                 on='server_generation', how='left'
@@ -170,7 +172,7 @@ class SystemState:
 
     def update_datacenter_capacity(self):
         """
-        Update the used slot capacity for each datacenter based on the current fleet.
+        Update the used slot capacity and total capacity for each datacenter based on the current fleet.
 
         Raises:
             ValueError: If any datacenter's used slots exceed its total capacity.
@@ -187,31 +189,63 @@ class SystemState:
         )
 
         # Merge with server info to get slot sizes
-        server_counts = server_counts.merge(self.servers_info[['server_generation', 'slots_size']], on='server_generation')
-        
-        # Calculate total slots used for each datacenter
-        datacenter_slots = (
-            server_counts
-            .groupby('datacenter_id')
-            .apply(lambda x: (x['count'] * x['slots_size']).sum())
-            .reset_index(name='used_slots')
+        server_counts = server_counts.merge(
+            self.servers_info[['server_generation', 'slots_size', 'capacity']], 
+            on='server_generation'
         )
         
-        # Update used slots in datacenter_capacity
-        for _, row in datacenter_slots.iterrows():
-            dc_capacity = self.datacenter_capacity.loc[
+        # Calculate total slots used and total capacity for each datacenter
+        datacenter_stats = (
+            server_counts
+            .groupby('datacenter_id')
+            .apply(lambda x: pd.Series({
+                'used_slots': (x['count'] * x['slots_size']).sum(),
+                'total_capacity': (x['count'] * x['capacity']).sum()
+            }))
+            .rename(columns={'count': 'used_slots', 'capacity': 'total_capacity'})
+            .reset_index()
+        )
+
+        # Calculate total slots used and total capacity for each datacenter
+        # datacenter_stats = (
+        #     server_counts
+        #     .groupby('datacenter_id')
+        #     .agg({
+        #         'count': lambda x: (x * server_counts.loc[x.index, 'slots_size']).sum(),
+        #         'capacity': lambda x: (x * server_counts.loc[x.index, 'capacity']).sum()
+        #     })
+        #     .rename(columns={'count': 'used_slots', 'capacity': 'total_capacity'})
+        #     .reset_index()
+        # )
+
+        # Ensure all datacenters are present in the stats
+        all_datacenters = self.datacenter_capacity['datacenter_id'].unique()
+        missing_datacenters = set(all_datacenters) - set(datacenter_stats['datacenter_id'])
+        
+        # Add missing datacenters with zero values
+        if missing_datacenters:
+            missing_df = pd.DataFrame({
+                'datacenter_id': list(missing_datacenters),
+                'used_slots': 0,
+                'total_capacity': 0
+            })
+            datacenter_stats = pd.concat([datacenter_stats, missing_df], ignore_index=True)
+
+        # Update used slots and total capacity in datacenter_capacity
+        for _, row in datacenter_stats.iterrows():
+            dc_max_slot_capacity = self.datacenter_capacity.loc[
                 self.datacenter_capacity['datacenter_id'] == row['datacenter_id'], 
                 'slots_capacity'
             ].iloc[0]  # Get the single value
             
             # Ensure capacity constraints are not violated
-            if row['used_slots'] <= dc_capacity:
+            if row['used_slots'] <= dc_max_slot_capacity:
                 self.datacenter_capacity.loc[
                     self.datacenter_capacity['datacenter_id'] == row['datacenter_id'], 
-                    'used_slots'
-                ] = row['used_slots']
+                    ['used_slots', 'total_capacity']
+                ] = [row['used_slots'], row['total_capacity']]
             else:
-                raise ValueError(f"Datacenter '{row['datacenter_id']}': capacity exceeded")
+                raise ValueError(f"Datacenter '{row['datacenter_id']}': slot capacity exceeded")
 
     def update_time(self):
         self.time_step += 1
@@ -248,7 +282,10 @@ class SystemState:
         return json.dumps(self.solution)
     
     @staticmethod
-    def calculate_objectives(fleet: pd.DataFrame, demand: pd.DataFrame, selling_prices: pd.DataFrame, time_step: int):
+    def calculate_objective(fleet: pd.DataFrame, 
+                            demand: pd.DataFrame, 
+                            selling_prices: pd.DataFrame, 
+                            time_step: int):
         """
         Calculate the combined objectives (U * L * P) for a given fleet, demand, and selling prices.
 
