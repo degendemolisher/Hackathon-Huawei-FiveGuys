@@ -4,7 +4,6 @@ import pandas as pd
 from utils import load_problem_data
 from evaluation import get_capacity_by_server_generation_latency_sensitivity, get_time_step_demand
 
-
 demand, datacenters, servers, selling_prices = load_problem_data()
 
 # Takes a timestep and returns a list of server types that are available for purcahse 
@@ -60,3 +59,14 @@ def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: list[str], time_s
     unsatisfied_demand = current_demand - capacity
 
     return max(0, unsatisfied_demand)
+
+# returns demand based on server generation, server latency and the timestep
+def get_server_demand(demand: pd.DataFrame, server_generation: str, datacenter_id: str, timestep: int) -> int:
+    server_latency = 'high' if datacenter_id == 'DC3' or datacenter_id == 'DC4' else 'medium' if datacenter_id == 'DC2' else 'low'
+
+    return demand.query(f"time_step == {timestep} and latency_sensitivity == '{server_latency}'")[server_generation]
+
+# this is just to check that all is in check
+def print_ser(fleet: pd.DataFrame):
+    for index, row in fleet.iterrows():
+        print(row.server_generation)
