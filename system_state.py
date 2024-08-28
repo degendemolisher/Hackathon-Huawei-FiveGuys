@@ -1,3 +1,4 @@
+import ast
 import json
 import pandas as pd
 
@@ -45,6 +46,8 @@ class SystemState:
         self.performance_metrics = {'U': 0, 'L': 0, 'P': 0}
         self.solution = []
 
+        # Convert the 'release_time' column from string to list
+        servers['release_time'] = servers['release_time'].apply(ast.literal_eval)
         self.servers_info = servers
         self.datacenter_info = datacenters
 
@@ -89,10 +92,6 @@ class SystemState:
             self.solution.append({
                 'time_step': self.time_step,
                 **decision
-                # "datacenter_id": decision["datacenter_id"],
-                # "server_generation": decision["server_generation"],
-                # "server_id": decision["server_id"],
-                # "action": decision["action"]
             })
     
 
@@ -123,6 +122,15 @@ class SystemState:
         if buy_decisions:
             buy_df = pd.DataFrame(buy_decisions)
             
+            # print(buy_df['datacenter_id'].dtype)
+            # print(buy_df['datacenter_id'].head())
+            # print(self.datacenter_info['datacenter_id'].dtype)
+            # print(self.datacenter_info['datacenter_id'].head())
+
+            # # Check for any list-like values
+            # print(buy_df['datacenter_id'].apply(lambda x: isinstance(x, list)).any())
+            # print(self.datacenter_info['datacenter_id'].apply(lambda x: isinstance(x, list)).any())
+            
             # Merge with datacenter_info
             buy_df = buy_df.merge(
                 self.datacenter_info, 
@@ -131,7 +139,8 @@ class SystemState:
             
             # Merge with servers_info
             buy_df = buy_df.merge(
-                self.servers_info, 
+                # self.servers_info,
+                self.servers_info.drop('release_time', axis=1), 
                 on='server_generation', how='left'
             )
             # 3/4 columns from datacenetrs.csv
@@ -180,6 +189,9 @@ class SystemState:
         Returns:
             None
         """
+        if self.fleet.empty:
+            return
+        
         # Group servers by datacenter and server generation
         server_counts = (
             self.fleet
@@ -245,6 +257,9 @@ class SystemState:
                     ['used_slots', 'total_capacity']
                 ] = [row['used_slots'], row['total_capacity']]
             else:
+                # Convert solution to DataFrame and save as JSON
+                solution_df = pd.DataFrame(self.solution)
+                solution_df.to_json('./data/solution.json', orient='records', indent=4)
                 raise ValueError(f"Datacenter '{row['datacenter_id']}': slot capacity exceeded")
 
     def update_time(self):
