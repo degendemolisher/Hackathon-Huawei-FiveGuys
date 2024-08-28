@@ -1,0 +1,11 @@
+datacenter_id,server_generation,server_id,lifespan,life_expectancy,latency_sensitivity,capacity,purchase_price,average_maintenance_fee,energy_consumption,cost_of_energy,moved
+DC2,CPU.S2,3dffc8ab-edac-4fdb-a3d6-878c7c323f7c,1,96,medium,75,16000,308,460,0.35,0
+DC2,CPU.S2,36196cf0-b022-4707-9f33-eac4163d1510,1,96,medium,75,16000,308,460,0.35,0
+DC2,CPU.S2,cd10a497-171c-4bd1-9f25-b2d4754b4301,1,96,medium,75,16000,308,460,0.35,0
+DC2,CPU.S2,236ba91a-d1d8-438b-b9f2-4d65ad25cfdb,1,96,medium,75,16000,308,460,0.35,0
+DC3,GPU.S3,0ee612e6-8e1e-494b-935a-cfc6cafe69bf,1,96,high,8,160000,3080,4200,0.65,0
+DC3,GPU.S3,80e90d2c-6a26-4725-a63e-67d63f4cacca,1,96,high,8,160000,3080,4200,0.65,0
+DC3,GPU.S3,41c83005-739a-431e-8f22-db37fcdf0dcb,1,96,high,8,160000,3080,4200,0.65,0
+DC3,GPU.S3,71cffe99-0123-4016-b62d-d99acad18736,1,96,high,8,160000,3080,4200,0.65,0
+DC3,GPU.S3,ce3e90eb-8c5c-4466-b806-1d864d226cde,1,96,high,8,160000,3080,4200,0.65,0
+DC3,GPU.S3,b884fab6-8175-42e0-bbde-010f882f8820,1,96,high,8,160000,3080,4200,0.65,0
