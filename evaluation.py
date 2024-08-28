@@ -350,6 +350,7 @@ def get_evaluation(solution,
 
     # DEMAND DATA PREPARATION
     demand = get_actual_demand(demand)
+    print(demand.columns)
 
     OBJECTIVE = 0
     FLEET = pd.DataFrame()
@@ -366,6 +367,9 @@ def get_evaluation(solution,
 
         # UPDATE FLEET
         FLEET = update_fleet(ts, FLEET, ts_fleet)
+
+        if(ts==1):
+            print(FLEET.columns)
   
         # CHECK IF THE FLEET IS EMPTY
         if FLEET.shape[0] > 0:
