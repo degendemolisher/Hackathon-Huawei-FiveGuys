@@ -95,6 +95,17 @@ class ActionSpace:
 
         return actions
 
+    def convert_actionspace_to_actionV2(self, agent_action):
+        actions = []
+        for datacenter in range(len(agent_action)):
+            datacenter = self.datacenters[datacenter]
+            for server_gen in range(len(agent_action[datacenter])):
+                action_number = agent_action[datacenter,server_gen]
+                server_gen = self.server_generations[server_gen]
+                action = self.operation_types[action_number]
+                actions.append([action, server_gen, "a", datacenter])
+                
+
 if __name__ == "__main__":
     action_space = ActionSpace()
     
