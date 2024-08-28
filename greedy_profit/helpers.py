@@ -52,12 +52,19 @@ indexed_servers = servers.set_index('server_generation')
 def get_server_capacity(server_generation: str) -> int:
     return indexed_servers.loc[server_generation, 'capacity']
 
-def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: list[str], time_step: int):
+# TESTED, WORKS
+def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: pd.DataFrame, time_step: int):
     current_demand = get_time_step_demand(actual_demand, time_step)
+    
+    # The fleet is empty, so unsatisfied demand = all demand
+    if time_step == 1:
+        return current_demand
+    
     capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
 
     unsatisfied_demand = current_demand - capacity
 
+    # TODO: Negative unsatisfied demand could be used to inform which servers to move/dismiss?
     return max(0, unsatisfied_demand)
 
 # returns demand based on server generation, server latency and the timestep

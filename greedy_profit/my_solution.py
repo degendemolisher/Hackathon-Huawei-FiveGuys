@@ -21,14 +21,11 @@ action: Action = {
         }
 
 def get_my_solution(actual_demand) -> list[Action]:
-    solution = pd.DataFrame(columns=Action.columns())
     system_state = SystemState(datacenters, servers)
 
     for ts in np.arange(1,get_known('time_steps')):
-        fleet = get_time_step_fleet(solution, ts)
-
         # Checks the demand that needs to be satisfied
-        unsatisfied_demand = get_unsatisfied_demand(actual_demand, fleet, ts)
+        unsatisfied_demand = get_unsatisfied_demand(actual_demand, system_state.fleet, ts)
 
         '''
         maximising lifespan is built into the main algorithm
