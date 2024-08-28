@@ -24,8 +24,6 @@ def get_my_solution(actual_demand) -> list[Action]:
     system_state = SystemState(datacenters, servers)
 
     for ts in np.arange(1,get_known('time_steps')):
-        # Checks the demand that needs to be satisfied
-        unsatisfied_demand = get_unsatisfied_demand(actual_demand, system_state.fleet, ts)
 
         '''
         maximising lifespan is built into the main algorithm
@@ -62,20 +60,33 @@ def get_my_solution(actual_demand) -> list[Action]:
 
     
 
-        # Buys servers if there is unsatisfied demand
-        ## which servers?
-        available_cpus, available_gpus = get_available_servers(ts)
-        cpu_target = get_most_profitable(available_cpus)
-        gpu_target = get_most_profitable(available_gpus)
+        """
+        Greedy profit algorithm (WIP)
+        """
+        # Checks the demand that needs to be satisfied
+        unsatisfied_demand = get_unsatisfied_demand(actual_demand, system_state.fleet, ts)
 
-        ## how many?
-        cpu_capacity = get_server_capacity(cpu_target)
-        gpu_capacity = get_server_capacity(gpu_target)
+        # Calcualte how many of each server to buy
+
+        for server_generation in unsatisfied_demand.index.unique():
+            for latency_sensitivty in unsatisfied_demand.columns.unique():
+                # TODO
+                pass
+                selling_price = selling_prices\
+                    .set_index(['server_generation', 'latency_sensitivity'])\
+                    .loc[server_generation, latency_sensitivty]
+                
+                d = unsatisfied_demand.loc[server_generation][latency_sensitivty]
+
+
+        # TODO: this is a WIP faster way using DataFrane.map,
+        #       it's just difficult to retrieve the column/row values
+        # def get_servers_to_buy(demand):
+        #     print(demand)
+        # servers_to_buy = unsatisfied_demand.map(get_servers_to_buy)
 
         # update solution with new actions at the end of each timestep
         solution = pd.concat([solution, action_list])
-
-        pass
 
 
     return solution
