@@ -1,4 +1,5 @@
 
+import math
 import numpy as np
 import pandas as pd
 from greedy_profit.helpers import *
@@ -67,27 +68,36 @@ def get_my_solution(actual_demand) -> list[Action]:
         unsatisfied_demand = get_unsatisfied_demand(actual_demand, system_state.fleet, ts)
 
         # Calcualte how many of each server to buy
-
+        servers_to_buy = {}
         for server_generation in unsatisfied_demand.index.unique():
+            servers_to_buy[server_generation] = {}
             for latency_sensitivty in unsatisfied_demand.columns.unique():
-                # TODO
-                pass
                 selling_price = selling_prices\
                     .set_index(['server_generation', 'latency_sensitivity'])\
-                    .loc[server_generation, latency_sensitivty]
-                
+                    .loc[server_generation, latency_sensitivty]['selling_price']
+
                 d = unsatisfied_demand.loc[server_generation][latency_sensitivty]
 
+                # TODO: Is math.floor or math.ceil or round() better?
+                servers_to_buy[server_generation][latency_sensitivty] = round(d / selling_price)
+        
+        servers_to_buy = pd.DataFrame(servers_to_buy).transpose().rename_axis('server_generation')
 
-        # TODO: this is a WIP faster way using DataFrane.map,
-        #       it's just difficult to retrieve the column/row values
-        # def get_servers_to_buy(demand):
-        #     print(demand)
-        # servers_to_buy = unsatisfied_demand.map(get_servers_to_buy)
-
+        # Construct buy actions
+        buy_actions = []
+        for server_generation in servers_to_buy.index.unique():
+            for latency_sensitivty in servers_to_buy.columns.unique():
+                n = servers_to_buy.loc[server_generation][latency_sensitivty]
+                # TODO: validate there is enough space in the datacenter for the servers
+                #       /update n to be the maximum number of servers you can buy before the DC is full
+                # TODO: Implement a variable that work as triggers for swapping from DC3 to DC4 if necessary (DC3 should be preferred for its lower cost of energy)
+                for server in range(1, n + 1):
+                    # TODO: using hashes as IDs for now. Could swap to counting up the number of servers to make dismissing easier
+                    #       get_server_counts() and system_state.get_servers_in_datacentre() functions would help with this
+                    buy_actions.append
+    
         # update solution with new actions at the end of each timestep
         solution = pd.concat([solution, action_list])
-
 
     return solution
 
