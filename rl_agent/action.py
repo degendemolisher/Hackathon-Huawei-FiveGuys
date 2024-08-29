@@ -100,7 +100,7 @@ class ActionSpace:
         for datacenter in range(len(agent_action)):
             datacenter_id = self.data_centers[datacenter]
             for server_gen in range(len(agent_action[datacenter])):
-                action_number = agent_action[datacenter,server_gen]
+                action_number = int(agent_action[datacenter,server_gen])
                 server_gen = self.server_generations[server_gen]
                 action = self.operation_types[action_number]
                 actions.append([action, server_gen, "a", datacenter_id])
