@@ -104,18 +104,19 @@ class ActionSpace:
         for datacenter in range(len(agent_action)):
             datacenter_id = self.data_centers[datacenter]
             #get capacity for the datacenter
-            dc_cap = self.datacenters_csv[self.datacenters_csv["datacenter_id"] == datacenter_id]["slots_capacity"]
+            dc_cap = self.datacenters_csv[self.datacenters_csv["datacenter_id"] == datacenter_id]["slots_capacity"].iloc[0]
             #over all server generations
             for server_gen_num in range(len(agent_action[datacenter])):
                 server_gen = self.server_generations[server_gen_num]
                 for action_perc_num in range(len(agent_action[datacenter][server_gen_num])):
                     action_perc = agent_action[datacenter][server_gen_num][action_perc_num]
-                    num_servers = int(action_perc * dc_cap)
+                    num_servers = action_perc * dc_cap
                     #divide by slotsize to get number of servers
                     if(server_gen in self.cpu):
                         num_servers /= 2
                     else:
                         num_servers /= 4
+                    num_servers = int(num_servers)
                     action = self.operation_types[action_perc_num]
                     actions.append([action, server_gen, num_servers, datacenter_id])
         return actions
