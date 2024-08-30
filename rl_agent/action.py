@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from collections import deque, defaultdict
 
 class ActionSpace:
@@ -6,8 +7,11 @@ class ActionSpace:
         self.operation_types = ['buy', 'move', 'dismiss', 'hold']
         self.server_generations = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4',
                                    'GPU.S1', 'GPU.S2', 'GPU.S3']
+        self.cpu = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4']
+        self.gpu = ['GPU.S1', 'GPU.S2', 'GPU.S3']
         self.data_centers = ['DC1', 'DC2', 'DC3', 'DC4']
         self.server_id_counters = {gen: 0 for gen in self.server_generations}
+        self.datacenters_csv = pd.read_csv("data/datacenters.csv")
         self.existing_servers = {dc: {gen: deque() for gen in self.server_generations} for dc in self.data_centers}
          
         self.Fleet = {dc: {gen: {'servers': [], 'total_owned': 0} for gen in self.server_generations} for dc in self.data_centers}
@@ -99,11 +103,21 @@ class ActionSpace:
         actions = []
         for datacenter in range(len(agent_action)):
             datacenter_id = self.data_centers[datacenter]
-            for server_gen in range(len(agent_action[datacenter])):
-                action_number = int(agent_action[datacenter,server_gen])
-                server_gen = self.server_generations[server_gen]
-                action = self.operation_types[action_number]
-                actions.append([action, server_gen, "a", datacenter_id])
+            #get capacity for the datacenter
+            dc_cap = self.datacenters_csv[self.datacenters_csv["datacenter_id"] == datacenter_id]["slots_capacity"]
+            #over all server generations
+            for server_gen_num in range(len(agent_action[datacenter])):
+                server_gen = self.server_generations[server_gen_num]
+                for action_perc_num in range(len(agent_action[datacenter][server_gen_num])):
+                    action_perc = agent_action[datacenter][server_gen_num][action_perc_num]
+                    num_servers = int(action_perc * dc_cap)
+                    #divide by slotsize to get number of servers
+                    if(server_gen in self.cpu):
+                        num_servers /= 2
+                    else:
+                        num_servers /= 4
+                    action = self.operation_types[action_perc_num]
+                    actions.append([action, server_gen, num_servers, datacenter_id])
         return actions
                 
 
