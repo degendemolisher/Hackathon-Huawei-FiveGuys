@@ -4,6 +4,11 @@ import numpy as np
 from typing import List, Dict, Set, Tuple
 import uuid
 import sys
+import logging
+
+# Create logger
+logging.basicConfig(level=logging.DEBUG, filename='server_operations.log', filemode='w',
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 # setting path
 sys.path.append('..')
@@ -23,19 +28,40 @@ LATENCY_TO_DC = {
     'high': ['DC3', 'DC4']
 }
 
-def get_target_dc(latency, server_slots, datacenters_cap):
+# def get_target_dc(latency, server_slots, datacenters_cap):
+#     available_dcs = []
+#     for dc in LATENCY_TO_DC[latency]:
+#         dc_info = datacenters_cap[datacenters_cap['datacenter_id'] == dc].iloc[0]
+#         available_slots = dc_info['slots_capacity'] - dc_info['used_slots']
+#         if available_slots >= server_slots:
+#             available_dcs.append((dc, available_slots))
+    
+#     if not available_dcs:
+#         return None
+    
+#     # Choose the DC with the most available slots
+#     return max(available_dcs, key=lambda x: x[1])[0]
+
+def get_target_dc(latency, server_slots, datacenters_cap, dc_info, dismiss=False):
     available_dcs = []
+
     for dc in LATENCY_TO_DC[latency]:
-        dc_info = datacenters_cap[datacenters_cap['datacenter_id'] == dc].iloc[0]
-        available_slots = dc_info['slots_capacity'] - dc_info['used_slots']
+        dc_cap = datacenters_cap[datacenters_cap['datacenter_id'] == dc].iloc[0]
+        dc_inf = dc_info[dc_info['datacenter_id'] == dc].iloc[0]
+        available_slots = dc_cap['slots_capacity'] - dc_cap['used_slots']
+
         if available_slots >= server_slots:
-            available_dcs.append((dc, available_slots))
+            available_dcs.append((dc, dc_inf['cost_of_energy']))
     
     if not available_dcs:
         return None
     
-    # Choose the DC with the most available slots
-    return max(available_dcs, key=lambda x: x[1])[0]
+    # Choose the DC with the highest cost of energy if we dismiss the server
+    if dismiss:
+        return max(available_dcs, key=lambda x: x[1])[0]
+
+    # Choose the DC with the lowest cost of energy
+    return min(available_dcs, key=lambda x: x[1])[0]
 
 def calculate_servers(demand_df: pd.DataFrame, servers_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -179,7 +205,7 @@ def check_fleet_for_old_servers(state: SystemState) -> Tuple[List, pd.DataFrame,
 
 def move_servers(state: SystemState, 
                  demand_def_exc: pd.DataFrame, 
-                 actions: List,
+                #  actions: List,
                  processed_servers: Set) -> Tuple[List, pd.DataFrame, Set]:
     """
     Move servers between datacenters to satisfy demand based on calculated demand deficit and excess.
@@ -196,10 +222,11 @@ def move_servers(state: SystemState,
         pd.DataFrame: updated demand_def_exc to find which demand yet to satisfy
         set: updated set of processed servers
     """
-    
+    actions = []
     fleet_df = state.fleet
     datacenters_df = state.datacenter_capacity.copy()
     updated_demand_def_exc = demand_def_exc.copy()
+    dc_info = state.datacenter_info
 
     for idx, row in demand_def_exc.iterrows():
         server_generation = row['server_generation']
@@ -227,7 +254,7 @@ def move_servers(state: SystemState,
                     if servers_to_move == 0:
                         break
 
-                    target_dc = get_target_dc(to_latency, server_slots, datacenters_df)
+                    target_dc = get_target_dc(to_latency, server_slots, datacenters_df, dc_info)
 
                     # Check for full DC
                     dc_mask = datacenters_df['datacenter_id'] == target_dc
@@ -266,7 +293,7 @@ def move_servers(state: SystemState,
 
 def buy_servers(state: SystemState, 
                 demand_def_exc: pd.DataFrame, 
-                actions: List,
+                # actions: List,
                 processed_servers: Set)-> Tuple[List, pd.DataFrame, Set]:
     """
     Determine if new servers need to be bought to satisfy remaining demand 
@@ -282,8 +309,10 @@ def buy_servers(state: SystemState,
         pd.DataFrame: updated demand_def_exc to find which servers are not utilized
         set: updated set of processed servers 
     """
+    actions = []
     datacenters_df = state.datacenter_capacity.copy()
     updated_demand_def_exc = demand_def_exc.copy()
+    dc_info = state.datacenter_info
     
     for idx, row in demand_def_exc.iterrows():
         server_generation = row['server_generation']
@@ -294,7 +323,7 @@ def buy_servers(state: SystemState,
             
             if deficit > 0:
                 for _ in range(deficit):
-                    target_dc = get_target_dc(latency, server_slots, datacenters_df)
+                    target_dc = get_target_dc(latency, server_slots, datacenters_df, dc_info)
                     dc_mask = datacenters_df['datacenter_id'] == target_dc
                     dc_fullness = datacenters_df.loc[dc_mask, 'used_slots'] >= datacenters_df.loc[dc_mask, 'slots_capacity']
                     if target_dc is None or dc_fullness.any():
@@ -319,11 +348,13 @@ def buy_servers(state: SystemState,
 
 def dismiss_servers(state: SystemState, 
                     demand_def_exc: pd.DataFrame, 
-                    actions: List,
+                    # actions: List,
                     processed_servers: Set) -> List:
     
+    actions = []
     fleet_df = state.fleet
     datacenters_df = state.datacenter_capacity.copy()
+    dc_info = state.datacenter_info
 
     for _, row in demand_def_exc.iterrows():
         server_generation = row['server_generation']
@@ -331,18 +362,22 @@ def dismiss_servers(state: SystemState,
         
         for latency in LATENCIES:
             excess = max(0, row[latency])  # Ensure we only consider positive values as excess
+            logging.debug(f"Checking {server_generation} for {latency} latency. Excess: {excess}")
+
             
             if excess > 0:
 
                 servers = fleet_df[(fleet_df['server_generation'] == server_generation) &
                                    (fleet_df['datacenter_id'].isin(LATENCY_TO_DC[latency])) &
                                    (~fleet_df['server_id'].isin(processed_servers))]  # Exclude already processed servers
+                logging.critical(f"Servers to dismiss \n\n{servers}\n\n")
 
                 for _, server in servers.iterrows():
-                    target_dc = get_target_dc(latency, server_slots, datacenters_df)
+                    target_dc = get_target_dc(latency, server_slots, datacenters_df, dc_info, dismiss=True)
                     
                     if target_dc is None or excess == 0:
                         # print(f"Warning: No available datacenter for {latency} latency. Skipping buy action.")
+                        logging.debug(f"No available datacenter for {latency} latency or excess is {excess}. Skipping.")
                         continue
                 
                     # Update datacenter used slots
@@ -356,48 +391,79 @@ def dismiss_servers(state: SystemState,
                         'action': 'dismiss',
                         'dismissed_by': 'dismiss_servers'
                     })
+                    logging.info(f"Dismissing server {server['server_id']} from {target_dc}")
 
                     processed_servers.add(server['server_id'])
                     excess -= 1
 
     return actions
 
+def logging_fleet(fleet):
+    # Log total number of rows
+    logging.info(f"Total rows in fleet: {len(fleet)}")
+
+    # Log number of distinct rows based on 'server_id'
+    distinct_rows = fleet.drop_duplicates(subset='server_id')
+    logging.info(f"Number of distinct rows in fleet: {len(distinct_rows)}")
+
+    # Log number of distinct rows based on all columns
+    fully_distinct_rows = fleet.drop_duplicates()
+    logging.info(f"Number of fully distinct rows in fleet: {len(fully_distinct_rows)}")
 
 def allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
+
+    all_action = []
+
     # Dismiss old servers
-    actions, processed_servers = check_fleet_for_old_servers(state)
-    state.update_fleet(actions)
+    dismiss_old_srvs_actions, processed_servers = check_fleet_for_old_servers(state)
+    state.update_fleet(dismiss_old_srvs_actions)
+    logging.info(f"AFTER check_fleet_for_old_servers")
+    logging_fleet(state.fleet)
     print('in check_fleet_for_old_servers')
     state.update_datacenter_capacity()
+    all_action += dismiss_old_srvs_actions
     
     srvs_cnt = srvs_count(state.fleet)
     demand_def_exc = calculate_demand_def_exc(srvs_cnt, demand)
 
     # Move servers
-    actions, updated_demand_def_exc, processed_servers = move_servers(state, 
+    move_actions, updated_demand_def_exc, processed_servers = move_servers(state, 
                                                                       demand_def_exc,
-                                                                      actions, 
+                                                                    #   actions, 
                                                                       processed_servers)
-    state.update_fleet(actions)
+    state.update_fleet(move_actions)
+    logging.info(f"AFTER move_servers")
+    logging_fleet(state.fleet)
     print('in move_servers')
     state.update_datacenter_capacity()
+    all_action += move_actions
 
     # Buy servers
-    actions, updated_demand_def_exc, processed_servers = buy_servers(state, 
+    buy_actions, updated_demand_def_exc, processed_servers = buy_servers(state, 
                                                                      updated_demand_def_exc, 
-                                                                     actions,
+                                                                    #  actions,
                                                                      processed_servers)
-    state.update_fleet(actions)
+    state.update_fleet(buy_actions)
+    logging.info(f"AFTER buy_servers")
+    logging_fleet(state.fleet)
     print('in buy_servers')
     state.update_datacenter_capacity()
+    all_action += buy_actions
 
-    # Dismiss unused servers
-    actions = dismiss_servers(state, 
-                              updated_demand_def_exc, 
-                              actions,
-                              processed_servers)
+    # # Dismiss unused servers
+    # dismiss_actions = dismiss_servers(state, 
+    #                           updated_demand_def_exc, 
+    #                         #   actions,
+    #                           processed_servers)
+    
+    # state.update_fleet(dismiss_actions)
+    # logging.info(f"AFTER dismiss_servers")
+    # logging_fleet(state.fleet)
+    # print('in dismiss_servers')
+    # state.update_datacenter_capacity()
+    # all_action += dismiss_actions
 
-    return actions
+    return all_action
 
 
 def get_solution(datacenters: pd.DataFrame, 
@@ -411,16 +477,15 @@ def get_solution(datacenters: pd.DataFrame,
         print(ts)
         current_demand_srvs = demand_srvs.loc[demand['time_step'] == ts]
         actions = allocate_servers(state, current_demand_srvs)
-
-        print('in dismiss_servers')
+        
         state.update_state(actions)
         print(state.datacenter_capacity)
 
-        if ts == 35:
-            fleet = state.fleet
-            # fleet.drop_duplicates('server_id', inplace=False)
-            fleet.set_index('server_id', drop=False, inplace=True)
-            fleet.to_json('fleet_at_35.json')
+        # if ts == 35:
+        #     fleet = state.fleet
+        #     # fleet.drop_duplicates('server_id', inplace=False)
+        #     fleet.set_index('server_id', drop=False, inplace=True)
+        #     fleet.to_json('fleet_at_35.json')
     
     return state.solution
 

@@ -211,15 +211,14 @@ def adjust_capacity_by_failure_rate(x):
     return int(x * (1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item()))
 
 
-def check_datacenter_slots_size_constraint(fleet, ts):
+def check_datacenter_slots_size_constraint(fleet):
     # CHECK DATACENTERS SLOTS SIZE CONSTRAINT
     slots = fleet.groupby(by=['datacenter_id']).agg({'slots_size': 'sum',
                                                      'slots_capacity': 'mean'})
     test = slots['slots_size'] > slots['slots_capacity']
     constraint = test.any()
     if constraint:
-        fleet.to_json('fleet_constraint.json') # TODO:
-        raise(ValueError(f'Constraint 2 has been violated at {ts}.\n{test}\n\n{slots['slots_size']}\n\n{slots['slots_capacity']}')) # TODO:
+        raise(ValueError('Constraint 2 has been violated.'))
 
 
 def get_utilization(D, Z):
@@ -306,7 +305,6 @@ def update_fleet(ts, fleet, solution):
         fleet = solution.copy()
         fleet['lifespan'] = 0
         fleet['moved'] = 0
-        fleet['times_moved'] = 0 # TODO:
     else:
         server_id_action = solution[['action', 'server_id']].groupby('action')['server_id'].apply(list).to_dict()
         # BUY
@@ -319,8 +317,6 @@ def update_fleet(ts, fleet, solution):
             fleet.loc[s, dc_fields] = solution.loc[s, dc_fields]
             fleet.loc[s, 'selling_price'] = solution.loc[s, 'selling_price']
             fleet.loc[s, 'moved'] = 1
-            fleet.loc[s, 'times_moved'] += 1 # TODO:
-            
         # HOLD
             # do nothing
         # DISMISS
@@ -390,7 +386,7 @@ def get_evaluation(solution,
             Zf = get_capacity_by_server_generation_latency_sensitivity(FLEET)
     
             # CHECK CONSTRAINTS
-            check_datacenter_slots_size_constraint(FLEET, ts)
+            check_datacenter_slots_size_constraint(FLEET)
     
             # EVALUATE THE OBJECTIVE FUNCTION AT TIMESTEP ts
             U = get_utilization(D, Zf)
@@ -423,7 +419,7 @@ def get_evaluation(solution,
 
         if verbose:
             print(output)
-    FLEET.to_json('fleet_valid.json')   # TODO: 
+            
     return OBJECTIVE
 
 
@@ -471,16 +467,23 @@ def evaluation_function(solution,
     # SET RANDOM SEED
     np.random.seed(seed)
     # EVALUATE SOLUTION
-    try:
-        return get_evaluation(solution, 
-                              demand,
-                              datacenters,
-                              servers,
-                              selling_prices,
-                              time_steps=time_steps, 
-                              verbose=verbose)
-    # CATCH EXCEPTIONS
-    except Exception as e:
-        logger.error(e)
-        return None
+    # try:
+    #     return get_evaluation(solution, 
+    #                           demand,
+    #                           datacenters,
+    #                           servers,
+    #                           selling_prices,
+    #                           time_steps=time_steps, 
+    #                           verbose=verbose)
+    # # CATCH EXCEPTIONS
+    # except Exception as e:
+    #     logger.error(e)
+    #     return None
 
+    return get_evaluation(solution, 
+                            demand,
+                            datacenters,
+                            servers,
+                            selling_prices,
+                            time_steps=time_steps, 
+                            verbose=verbose)

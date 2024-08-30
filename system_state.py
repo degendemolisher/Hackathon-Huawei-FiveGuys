@@ -61,8 +61,8 @@ class SystemState:
         """
         self.update_time()
         self.update_solution(decision)
-        self.update_fleet(decision)
-        self.update_datacenter_capacity()
+        # self.update_fleet(decision)
+        # self.update_datacenter_capacity()
 
 
     def update_solution(self, decisions):
