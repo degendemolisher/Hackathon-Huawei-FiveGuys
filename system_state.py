@@ -108,14 +108,14 @@ class SystemState:
                 - 'server_id': str, the unique ID of the server
         """
         buy_decisions = []
-        dismiss_server_ids = []
+        dismiss_server_ids = set()
         move_decisions = []
 
         for decision in decisions:
             if decision['action'] == 'buy':
                 buy_decisions.append(decision)
             elif decision['action'] == 'dismiss':
-                dismiss_server_ids.append(decision['server_id'])
+                dismiss_server_ids.add(decision['server_id'])
             elif decision['action'] == 'move':
                 move_decisions.append(decision)
 
@@ -150,7 +150,7 @@ class SystemState:
                 'datacenter_id':           buy_df['datacenter_id'],
                 'server_generation':       buy_df['server_generation'],
                 'server_id':               buy_df['server_id'],
-                'lifespan':                0,
+                'lifespan':                1,
                 'life_expectancy':         buy_df['life_expectancy'],
                 'latency_sensitivity':     buy_df['latency_sensitivity'],
                 'capacity':                buy_df['capacity'],
@@ -176,7 +176,7 @@ class SystemState:
 
             # Update datacenter_id for moved servers
             self.fleet.loc[move_mask, 'datacenter_id'] = self.fleet.loc[move_mask, 'server_id'].map(move_dict)
-            self.fleet.loc[move_mask, 'moved'] += 1
+            self.fleet.loc[move_mask, 'moved'] = 1
 
 
     def update_datacenter_capacity(self):
@@ -259,7 +259,8 @@ class SystemState:
             else:
                 # Convert solution to DataFrame and save as JSON
                 solution_df = pd.DataFrame(self.solution)
-                solution_df.to_json('./data/solution.json', orient='records', indent=4)
+                solution_df.to_json('error_actions.json', orient='records', indent=4)
+                print(datacenter_stats)
                 raise ValueError(f"Datacenter '{row['datacenter_id']}': slot capacity exceeded")
 
     def update_time(self):

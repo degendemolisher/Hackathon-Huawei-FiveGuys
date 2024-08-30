@@ -2,16 +2,13 @@
 import numpy as np
 import pandas as pd
 from seeds import known_seeds
-from utils import save_solution, load_problem_data
+from utils import save_solution
 from evaluation import get_actual_demand
-
-from solution_artem_v1 import get_solution
 
 
 def get_my_solution(d):
     # This is just a placeholder.
-    _, datacenters, servers, _ = load_problem_data()
-    return get_solution(datacenters, servers, d)
+    return [{}]
 
 
 seeds = known_seeds('training')
@@ -25,8 +22,7 @@ for seed in seeds:
     actual_demand = get_actual_demand(demand)
 
     # CALL YOUR APPROACH HERE
-    solution = get_my_solution()
+    solution = get_my_solution(actual_demand)
 
     # SAVE YOUR SOLUTION
     save_solution(solution, f'./output/{seed}.json')
-
