@@ -80,7 +80,7 @@ class SystemState:
                 - 'server_id': str, the unique ID of the server
 
         Example:    
-            decisins = [
+            decisions = [
                 {
                     'datacenter_id': 'DC1',
                     'server_generation': 'CPU.S1',
