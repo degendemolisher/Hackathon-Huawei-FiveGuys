@@ -47,13 +47,21 @@ class SystemState:
         self.solution = []
 
         # Convert the 'release_time' column from string to list
-        servers['release_time'] = servers['release_time'].apply(ast.literal_eval)
+        # try:
+        servers['release_time'] = pd.eval(servers['release_time'])
+            # print(f"Did convert.\nservers['release_time']\n{servers['release_time']}")
+        # except Exception as e:
+            # print(f"Did not convert.\nservers['release_time']\n{servers['release_time']}")
+            # raise e
+        
         self.servers_info = servers
         self.datacenter_info = datacenters
 
 
     def update_state(self, decision):
         """
+        OPTIONAL
+
         Update the system state based on a given decision.
 
         Warning:
@@ -61,8 +69,8 @@ class SystemState:
         """
         self.update_time()
         self.update_solution(decision)
-        # self.update_fleet(decision)
-        # self.update_datacenter_capacity()
+        self.update_fleet(decision)
+        self.update_datacenter_capacity()
 
 
     def update_solution(self, decisions):
