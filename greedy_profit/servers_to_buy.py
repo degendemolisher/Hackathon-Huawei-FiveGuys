@@ -1,5 +1,5 @@
 import pandas as pd
-from helpers import selling_prices
+from greedy_profit.helpers import selling_prices
 
 def get_servers_to_buy(unsatisfied_demand: pd.DataFrame):
     """
