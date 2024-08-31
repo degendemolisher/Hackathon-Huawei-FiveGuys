@@ -34,24 +34,37 @@ LATENCY_TO_DC = {
 }
 
 
-def calculate_moving_average(actual_demand, window_size=6):
+# def calculate_moving_average(actual_demand, window_size=6):
+#     # Group by server_generation
+#     grouped = actual_demand.groupby('server_generation')
+    
+#     # Calculate moving average for each group
+#     ma_dfs = []
+
+#     for _, group in grouped:
+#         ma_df = group.copy()
+
+#         for col in ['high', 'low', 'medium']:
+#             ma_df[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
+
+#         ma_dfs.append(ma_df)
+    
+#     # Combine all moving average dataframes
+#     ma_actual_demand = pd.concat(ma_dfs).sort_index()
+#     return ma_actual_demand
+
+def calculate_moving_average(demand_df, window_size):
     # Group by server_generation
-    grouped = actual_demand.groupby('server_generation')
+    grouped = demand_df.groupby('server_generation')
     
-    # Calculate moving average for each group
-    ma_dfs = []
-
-    for _, group in grouped:
-        ma_df = group.copy()
-
+    # Function to calculate moving average for a group
+    def group_moving_average(group):
         for col in ['high', 'low', 'medium']:
-            ma_df[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
-
-        ma_dfs.append(ma_df)
+            group[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
+        return group
     
-    # Combine all moving average dataframes
-    ma_actual_demand = pd.concat(ma_dfs).sort_index()
-    return ma_actual_demand
+    # Apply moving average calculation to each group
+    return grouped.apply(group_moving_average).reset_index(drop=True)
 
 
 def calculate_servers(actual_demand: pd.DataFrame) -> pd.DataFrame:
@@ -597,9 +610,16 @@ def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]
     demand_srvs = calculate_servers(ma_actual_demand)
     
     for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)): 
+        # state.update_time()
+
+        # if ts % 12 == 0:
+        #     current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
+        #     actions = _allocate_servers(state, current_demand_srvs)
+        #     state.update_solution(actions)
+
         current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
         actions = _allocate_servers(state, current_demand_srvs)
-        
+
         state.update_time()
         state.update_solution(actions)
     

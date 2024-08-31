@@ -24,7 +24,7 @@ for idx, seed in enumerate(seeds):
 
     # CALL YOUR APPROACH HERE
     print(f"\nSolution number {idx + 1}.")
-    solution = get_solution(actual_demand, 36)
+    solution = get_solution(actual_demand, 27)
 
     # SAVE YOUR SOLUTION
     save_solution(solution, f'./output/{seed}.json')
