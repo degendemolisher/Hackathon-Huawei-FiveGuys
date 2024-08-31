@@ -17,6 +17,7 @@ solution_scores = []
 for seed in tqdm(known_seeds('training')):
     # LOAD SOLUTION
     solution = load_solution(f'output/{seed}.json')
+    # solution = load_solution('../data/solution_example.json')
 
     # EVALUATE THE SOLUTION
     score = evaluation_function(solution,

@@ -23,7 +23,7 @@ for idx, seed in enumerate(seeds):
     actual_demand = get_actual_demand(demand)
 
     # CALL YOUR APPROACH HERE
-    print(f"\nSolution number {idx}.")
+    print(f"\nSolution number {idx + 1}.")
     solution = get_solution(actual_demand, 36)
 
     # SAVE YOUR SOLUTION
