@@ -26,4 +26,3 @@ for seed in seeds:
 
     # SAVE YOUR SOLUTION
     save_solution(solution, f'./output/{seed}.json')
-
