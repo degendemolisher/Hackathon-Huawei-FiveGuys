@@ -47,13 +47,8 @@ class SystemState:
         self.solution = []
 
         # Convert the 'release_time' column from string to list
-        # try:
         servers['release_time'] = pd.eval(servers['release_time'])
-            # print(f"Did convert.\nservers['release_time']\n{servers['release_time']}")
-        # except Exception as e:
-            # print(f"Did not convert.\nservers['release_time']\n{servers['release_time']}")
-            # raise e
-        
+
         self.servers_info = servers
         self.datacenter_info = datacenters
 
