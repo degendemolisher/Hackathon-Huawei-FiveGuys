@@ -266,12 +266,12 @@ class SystemState:
                 print(datacenter_stats)
                 raise ValueError(f"Datacenter '{row['datacenter_id']}': slot capacity exceeded")
 
-    def update_time(self):
-        self.time_step += 1
+    def update_time(self, ts=1):
+        self.time_step += ts
 
         # Pandas vectorized operation
         # thx Jamie for reminder
-        self.fleet['lifespan'] += 1
+        self.fleet['lifespan'] += ts
 
 
     def update_metrics(self, U=None, L=None, P=None):

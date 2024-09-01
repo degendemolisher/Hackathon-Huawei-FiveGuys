@@ -16,7 +16,7 @@ from system_state import SystemState
 DEMAND, DATACENTERS, SERVERS, _ = load_problem_data('../data')
 
 TEST_SEED = 1741
-MA_WINDOW_SIZE = 24
+WINDOW_SIZE = 27
 DISMISS_SERVERS_AT_TIME_STEP = 95
 
 TOTAL_TIME_STEPS = get_known('time_steps')
@@ -32,6 +32,18 @@ LATENCY_TO_DC = {
     'medium': ['DC2'],
     'high': ['DC3', 'DC4']
 }
+
+
+def get_gap_demand(actual_demand: pd.DataFrame, gap_size: int) -> pd.DataFrame:
+    gap_dfs = []
+    server_generations = actual_demand['server_generation'].unique()
+
+    for generation in server_generations:
+        df_gen = actual_demand[actual_demand['server_generation'] == generation]
+        gap_df = df_gen[df_gen['time_step'] % gap_size == 0]
+        gap_dfs.append(gap_df)
+
+    return pd.concat(gap_dfs, ignore_index=True).sort_values('time_step')
 
 
 # def calculate_moving_average(actual_demand, window_size=6):
@@ -530,7 +542,10 @@ def _process_server_dismissals(dc_costs: pd.DataFrame, dismissable_servers: pd.D
     return actions, processed_servers, datacenters_df
 
 
-def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
+def _allocate_servers(state: SystemState, 
+                      demand: pd.DataFrame,
+                      ts, 
+                      mean_future_srvs: pd.DataFrame = pd.DataFrame()) -> List[Dict]:
     """
     Allocate servers based on the current system state and demand.
 
@@ -575,10 +590,30 @@ def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
     all_action += buy_actions
 
     # Dismiss unused servers
-    dismiss_actions = dismiss_servers(state, 
-                                      updated_demand_def_exc, 
-                                      processed_servers)
+    # Check if future demand is lower
+    # if not mean_future_srvs.empty:
+    #     srvs_cnt = srvs_count(state.fleet)
+    #     future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, mean_future_srvs)
+    #     # print(updated_demand_def_exc)
+    #     # print(future_demand_def_exc)
+    #     is_future_demand_lower = (future_demand_def_exc[['high', 'medium', 'low']] <= 
+    #                               updated_demand_def_exc[['high', 'medium', 'low']])
+    #     # print(is_future_demand_lower)
+        
+    #     # if is_future_demand_lower:
+    #     dismiss_actions = dismiss_servers(state, 
+    #                                     future_demand_def_exc, 
+    #                                     processed_servers)
+        
+    #     state.update_fleet(dismiss_actions)
+    #     state.update_datacenter_capacity()
+    #     all_action += dismiss_actions
+    # if ts % 6 == 0:
     
+    dismiss_actions = dismiss_servers(state, 
+                                        updated_demand_def_exc, 
+                                        processed_servers)
+        
     state.update_fleet(dismiss_actions)
     state.update_datacenter_capacity()
     all_action += dismiss_actions
@@ -586,7 +621,22 @@ def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
     return all_action
 
 
-def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]:
+def _mean_future_demand_srvs(demand_srvs, ts, window_future):
+    # Calculate mean demand for next 6 timesteps
+    future_timesteps = range(ts + 1, min(ts + window_future + 1, TOTAL_TIME_STEPS + 1))
+    future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
+
+    # Calculate mean future demand while maintaining structure
+    mean_future_srvs = future_demand_srvs.groupby('server_generation')[['high', 'medium', 'low']].mean().astype(int).reset_index()
+    mean_future_srvs['time_step'] = ts  # Use current timestep
+            
+    # Reorder columns to match the original structure
+    mean_future_srvs = mean_future_srvs[['time_step', 'server_generation', 'high', 'medium', 'low']]
+
+    return mean_future_srvs
+
+
+def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
     """
     Generate a solution for server allocation based on actual demand over time.
 
@@ -605,21 +655,21 @@ def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]
         - The tqdm library is used to display a progress bar during execution.
     """
     state = SystemState(DATACENTERS, SERVERS)
-
-    ma_actual_demand = calculate_moving_average(actual_demand, window_size=ma_window_size)
+    ma_actual_demand = calculate_moving_average(actual_demand, window_size=window_size)
+    # gap_actual_demand = get_gap_demand(actual_demand, window_size)
     demand_srvs = calculate_servers(ma_actual_demand)
     
     for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)): 
-        # state.update_time()
-
-        # if ts % 12 == 0:
-        #     current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
-        #     actions = _allocate_servers(state, current_demand_srvs)
-        #     state.update_solution(actions)
-
         current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
-        actions = _allocate_servers(state, current_demand_srvs)
+        
+        # if ts % 6 == 0:
+        #     mean_future_srvs = _mean_future_demand_srvs(demand_srvs, ts, 6)
+        #     actions = _allocate_servers(state, current_demand_srvs, mean_future_srvs)
+        # else:
+        #     actions = _allocate_servers(state, current_demand_srvs)
 
+        actions = _allocate_servers(state, current_demand_srvs, ts)
+        
         state.update_time()
         state.update_solution(actions)
     
@@ -627,15 +677,15 @@ def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]
 
 
 def main():
-    print(f'[TEST MODE]: Seed used: {TEST_SEED}; MA Window size: {MA_WINDOW_SIZE}')
+    print(f'[TEST MODE]: Seed used: {TEST_SEED}; Window size: {WINDOW_SIZE}')
 
     np.random.seed(TEST_SEED)
 
     actual_demand = get_actual_demand(DEMAND)
-    solution = get_solution(actual_demand, ma_window_size=MA_WINDOW_SIZE)
+    solution = get_solution(actual_demand, window_size=WINDOW_SIZE)
     
     solution_df = pd.DataFrame(solution)
-    solution_df.to_json(f'../data/solution_ma_w{MA_WINDOW_SIZE}.json', orient='records', indent=4)
+    solution_df.to_json(f'../data/solution_ma_w{WINDOW_SIZE}.json', orient='records', indent=4)
 
 if __name__ == "__main__":
     main()
