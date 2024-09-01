@@ -1,4 +1,3 @@
-import ast
 import json
 import pandas as pd
 
@@ -81,7 +80,7 @@ class SystemState:
                 - 'server_id': str, the unique ID of the server
 
         Example:    
-            decisins = [
+            decisions = [
                 {
                     'datacenter_id': 'DC1',
                     'server_generation': 'CPU.S1',
@@ -303,7 +302,8 @@ class SystemState:
     def calculate_objective(fleet: pd.DataFrame, 
                             demand: pd.DataFrame, 
                             selling_prices: pd.DataFrame, 
-                            time_step: int):
+                            time_step: int,
+                            debug: bool = False):
         """
         Calculate the combined objectives (U * L * P) for a given fleet, demand, and selling prices.
 
@@ -332,4 +332,9 @@ class SystemState:
         selling_prices = change_selling_prices_format(selling_prices)
         P = get_profit(D, Zf, selling_prices, fleet)
 
-        return U * L * P
+        O = U * L * P
+
+        if debug:
+            print(f"O:{O} = U:{U} * L:{L} * P:{P}")
+
+        return O

@@ -10,7 +10,7 @@ solution = load_solution('data/solution.json')
 demand, datacenters, servers, selling_prices = load_problem_data()
 
 # EVALUATE THE SOLUTION
-score = evaluation_function(solution,
+score, FLEET = evaluation_function(solution,
                             demand,
                             datacenters,
                             servers,
