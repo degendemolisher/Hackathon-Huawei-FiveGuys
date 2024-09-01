@@ -267,9 +267,8 @@ class SystemState:
     def update_time(self):
         self.time_step += 1
 
-        # Pandas vectorized operation
-        # thx Jamie for reminder
-        self.fleet['lifespan'] += 1
+        # Update server lifespan and dismiss servers which are too old
+        self.fleet = update_check_lifespan(self.fleet)
 
 
     def update_metrics(self, U=None, L=None, P=None):

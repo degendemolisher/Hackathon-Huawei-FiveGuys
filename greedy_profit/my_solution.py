@@ -59,7 +59,7 @@ def get_my_solution(actual_demand) -> list[Action]:
     
 
         """
-        Greedy profit algorithm (WIP)
+        Greedy profit algorithm
         """
         # TODO: if there are servers in DC4 and there is space in DC3, move those servers from DC4 to DC3
 
