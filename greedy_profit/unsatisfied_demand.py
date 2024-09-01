@@ -17,12 +17,16 @@ def get_unsatisfied_demand(actual_demand: pd.DataFrame, fleet: pd.DataFrame, tim
         return current_demand
     
     capacity = get_capacity_by_server_generation_latency_sensitivity(fleet)
+    
+    # On the off chance that one of the latency sensitivities has no server capacity, 
+    #  reindex with intended columns and a default value
+    capacity = capacity.reindex(columns=['high', 'medium', 'low'], fill_value=0)
 
     unsatisfied_demand = {}
     relevant_server_generations = np.union1d(current_demand.index.unique(), capacity.index.unique())
     for server_generation in relevant_server_generations:
         unsatisfied_demand[server_generation] = {}
-        for latency_sensitivity in np.array(['low', 'medium', 'high']):
+        for latency_sensitivity in np.array(current_demand.columns.unique()):
 
             if server_generation in current_demand.index.unique():
                 this_demand = current_demand.loc[server_generation][latency_sensitivity]
