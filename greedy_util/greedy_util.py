@@ -16,7 +16,7 @@ from system_state import SystemState
 DEMAND, DATACENTERS, SERVERS, _ = load_problem_data('../data')
 
 TEST_SEED = 1741
-WINDOW_SIZE = 27
+WINDOW_SIZE = 2
 DISMISS_SERVERS_AT_TIME_STEP = 95
 
 TOTAL_TIME_STEPS = get_known('time_steps')
@@ -45,25 +45,6 @@ def get_gap_demand(actual_demand: pd.DataFrame, gap_size: int) -> pd.DataFrame:
 
     return pd.concat(gap_dfs, ignore_index=True).sort_values('time_step')
 
-
-# def calculate_moving_average(actual_demand, window_size=6):
-#     # Group by server_generation
-#     grouped = actual_demand.groupby('server_generation')
-    
-#     # Calculate moving average for each group
-#     ma_dfs = []
-
-#     for _, group in grouped:
-#         ma_df = group.copy()
-
-#         for col in ['high', 'low', 'medium']:
-#             ma_df[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
-
-#         ma_dfs.append(ma_df)
-    
-#     # Combine all moving average dataframes
-#     ma_actual_demand = pd.concat(ma_dfs).sort_index()
-#     return ma_actual_demand
 
 def calculate_moving_average(demand_df, window_size):
     # Group by server_generation
@@ -543,8 +524,7 @@ def _process_server_dismissals(dc_costs: pd.DataFrame, dismissable_servers: pd.D
 
 
 def _allocate_servers(state: SystemState, 
-                      demand: pd.DataFrame,
-                      ts, 
+                      demand: pd.DataFrame, 
                       mean_future_srvs: pd.DataFrame = pd.DataFrame()) -> List[Dict]:
     """
     Allocate servers based on the current system state and demand.
@@ -591,32 +571,17 @@ def _allocate_servers(state: SystemState,
 
     # Dismiss unused servers
     # Check if future demand is lower
-    # if not mean_future_srvs.empty:
-    #     srvs_cnt = srvs_count(state.fleet)
-    #     future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, mean_future_srvs)
-    #     # print(updated_demand_def_exc)
-    #     # print(future_demand_def_exc)
-    #     is_future_demand_lower = (future_demand_def_exc[['high', 'medium', 'low']] <= 
-    #                               updated_demand_def_exc[['high', 'medium', 'low']])
-    #     # print(is_future_demand_lower)
+    if not mean_future_srvs.empty:
+        srvs_cnt = srvs_count(state.fleet)
+        future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, mean_future_srvs)
         
-    #     # if is_future_demand_lower:
-    #     dismiss_actions = dismiss_servers(state, 
-    #                                     future_demand_def_exc, 
-    #                                     processed_servers)
-        
-    #     state.update_fleet(dismiss_actions)
-    #     state.update_datacenter_capacity()
-    #     all_action += dismiss_actions
-    # if ts % 6 == 0:
-    
-    dismiss_actions = dismiss_servers(state, 
-                                        updated_demand_def_exc, 
+        dismiss_actions = dismiss_servers(state, 
+                                        future_demand_def_exc, 
                                         processed_servers)
         
-    state.update_fleet(dismiss_actions)
-    state.update_datacenter_capacity()
-    all_action += dismiss_actions
+        state.update_fleet(dismiss_actions)
+        state.update_datacenter_capacity()
+        all_action += dismiss_actions
 
     return all_action
 
@@ -655,20 +620,22 @@ def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
         - The tqdm library is used to display a progress bar during execution.
     """
     state = SystemState(DATACENTERS, SERVERS)
-    ma_actual_demand = calculate_moving_average(actual_demand, window_size=window_size)
+
+    # ma_actual_demand = calculate_moving_average(actual_demand, window_size=window_size)
     # gap_actual_demand = get_gap_demand(actual_demand, window_size)
-    demand_srvs = calculate_servers(ma_actual_demand)
+
+    demand_srvs = calculate_servers(actual_demand)
     
     for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)): 
-        current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
+        current_demand_srvs = demand_srvs.loc[demand_srvs['time_step'] == ts]
         
-        # if ts % 6 == 0:
-        #     mean_future_srvs = _mean_future_demand_srvs(demand_srvs, ts, 6)
-        #     actions = _allocate_servers(state, current_demand_srvs, mean_future_srvs)
-        # else:
-        #     actions = _allocate_servers(state, current_demand_srvs)
-
-        actions = _allocate_servers(state, current_demand_srvs, ts)
+        if ts % WINDOW_SIZE == 0:
+            # Future demand
+            future_timesteps = range(ts + 1, min(ts + WINDOW_SIZE + 1, TOTAL_TIME_STEPS + 1))
+            future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
+            actions = _allocate_servers(state, current_demand_srvs, future_demand_srvs)
+        else:
+            actions = _allocate_servers(state, current_demand_srvs)
         
         state.update_time()
         state.update_solution(actions)
