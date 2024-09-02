@@ -1,16 +1,16 @@
 from utils import (load_problem_data,
                    load_solution)
-from evaluation import evaluation_function
+from evaluation_v6 import evaluation_function
 
 
 # LOAD SOLUTION
-solution = load_solution('data/solution.json')
+solution = load_solution('gpuall_merge_threshold_x4.json')
 
 # LOAD PROBLEM DATA
 demand, datacenters, servers, selling_prices = load_problem_data()
 
 # EVALUATE THE SOLUTION
-score, FLEET = evaluation_function(solution,
+score = evaluation_function(solution,
                             demand,
                             datacenters,
                             servers,

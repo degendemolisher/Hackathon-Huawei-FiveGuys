@@ -179,8 +179,7 @@ def get_time_step_demand(demand, ts):
     return d
 
 
-# evaluation.py: get_time_step_fleet
-def get_time_step_solution(solution, ts):
+def get_time_step_fleet(solution, ts):
     # GET THE SOLUTION AT A SPECIFIC TIME-STEP 
     if ts in solution['time_step'].values:
         s = solution[solution['time_step'] == ts]
@@ -211,7 +210,7 @@ def get_valid_columns(cols1, cols2):
 
 def adjust_capacity_by_failure_rate(x):
     # HELPER FUNCTION TO CALCULATE THE FAILURE RATE f
-    return int(x * 1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item())
+    return int(x * (1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item()))
 
 
 def check_datacenter_slots_size_constraint(fleet):
@@ -372,16 +371,16 @@ def get_evaluation(solution,
         # GET THE ACTUAL DEMAND AT TIMESTEP ts
         D = get_time_step_demand(demand, ts)
 
-        # GET THE ACTIONS AT TIMESTEP ts
-        ts_solution = get_time_step_solution(solution, ts)
+        # GET THE SERVERS DEPLOYED AT TIMESTEP ts
+        ts_fleet = get_time_step_fleet(solution, ts)
 
-        if ts_solution.empty and not FLEET.empty:
-            ts_solution = FLEET
-        elif ts_solution.empty and FLEET.empty:
+        if ts_fleet.empty and not FLEET.empty:
+            ts_fleet = FLEET
+        elif ts_fleet.empty and FLEET.empty:
             continue
 
         # UPDATE FLEET
-        FLEET = update_fleet(ts, FLEET, ts_solution)
+        FLEET = update_fleet(ts, FLEET, ts_fleet)
   
         # CHECK IF THE FLEET IS EMPTY
         if FLEET.shape[0] > 0:
@@ -457,14 +456,9 @@ def evaluation_function(solution,
     time_steps : int
         This is the number of time-steps for which we need to evaluate the 
         solution.
-
-    -------------------------
     c1_max_violations : int
         This is the maximum number of violations to Contraint 1 that can be
         tolerated. If this number is exceeded the function will output None.
-    WTF IS THIS????
-    Is this a snippet of code from a template? Some research might be worth....
-    -------------------------
 
     Return
     ------
@@ -486,5 +480,6 @@ def evaluation_function(solution,
     # CATCH EXCEPTIONS
     except Exception as e:
         logger.error(e)
+        raise(e)
         return None
 
