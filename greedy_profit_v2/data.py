@@ -1,7 +1,9 @@
-# Taken manually from the profitability spreadsheet in the google drive
 import pandas as pd
+from utils import load_problem_data
 
+demand, datacenters, servers, selling_prices = load_problem_data()
 
+# Taken manually from the profitability spreadsheet in the google drive
 break_even_time_all = {
         'GPU.S3': {
             'low': 12, # DC1
@@ -41,9 +43,18 @@ break_even_time_all = {
     }
 
 def get_sorted_servers(file_path: str):
-    """Get list of tuples of sorted servers from a CSV file"""
+    """
+    Get list of tuples of (server, latency) pairs from a CSV file.
+    The server/latency pairs are in descending order of profitability.
+    """
     
     df = pd.read_csv(file_path)
     df_sorted = df.sort_values(by='profitability', ascending=False)
     sorted_servers = list(df_sorted[['server_generation', 'latency_sensitivity']].itertuples(index=False, name=None))
     return sorted_servers
+
+def get_slot_size(server_generation: str):
+    if 'CPU' in server_generation:
+        return 2
+    else:
+        return 4
