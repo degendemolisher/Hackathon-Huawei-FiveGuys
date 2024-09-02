@@ -1,3 +1,4 @@
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -5,16 +6,35 @@ import pandas as pd
 
 #read contents of csv into variables
 datacenters = pd.read_csv("../data/datacenters.csv")
-demand = pd.read_csv("../data/demand.csv")
 selling_prices = pd.read_csv("../data/selling_prices.csv")
 servers = pd.read_csv("../data/servers.csv")
 
+# %%
 index_to_dcid = {0:"DC1",1:"DC2",2:"DC3",3:"DC4"}
+generations = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4', 'GPU.S1', 'GPU.S2', 'GPU.S3']
 
+#note demand_met is essentially min(zf, D)
 columns = ['time_step', 'datacenter_id',
  'CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4', 'GPU.S1', 'GPU.S2', 'GPU.S3', 
- 'total_owned']
+ 'demand_met']
 
+# %%
+#checks if dc cap exceeded
+def verify_solution_integrity(solution):
+    dc_cap = datacenters["slots_capacity"].to_numpy()
+    for i in range(4):
+        datacenter = solution[solution["datacenter_id"] == index_to_dcid[i]].agg({j:"sum" for j in generations})
+        cap_used = 0
+        for j in range(4):
+            cap_used += datacenter[j]*2
+        for j in range(4,7):
+            cap_used += datacenter[j]*4
+        if(cap_used > dc_cap[i]):
+            print("over max capacity used!")
+            return False
+    return True
+
+# %%
  #make a long af integer value readable
 def make_readable(value):
     string = ""
@@ -33,15 +53,16 @@ def dict_gen(time_steps):
 
 #convert the result array into a dataframe that contains the information
 #the results are len(TIMESTEPS* numberofdatacenters* numberofservergens)
-def result_to_df(result_x, result_y, time_steps):
+def result_to_df(result_x, result_y, start_step, time_steps):
     results_dict = dict_gen(time_steps)
     result_x = np.reshape(result_x,(time_steps, 4, 7))
     result_y = np.reshape(result_y,(time_steps, 4, 7))
+    ts = start_step
     row_counter = 1
     #each row contains a timestep and certain certain dc's info
     for i in range(1,time_steps+1):
         for dc in range(4):
-            results_dict[row_counter].append(i)
+            results_dict[row_counter].append(ts)
             results_dict[row_counter].append(index_to_dcid[dc])
             total_bought = []
             for servergen in range(7):
@@ -49,28 +70,21 @@ def result_to_df(result_x, result_y, time_steps):
                 total_bought.append(result_y[i-1, dc, servergen].solution_value())
             results_dict[row_counter].append(total_bought)
             row_counter += 1
+        ts+=1
     result_df = pd.DataFrame.from_dict(results_dict, orient="index", columns=columns)
     return result_df
 
+# %%
 import numpy as np
 from scipy.optimize import minimize
-
-#for DC1 and servergen cpus1 over first TIMESTEPS timesteps
-
-TIMESTEPS = 24
-START_STEP = 1
 
 dc_cap = datacenters["slots_capacity"].to_numpy()
 server_energies = servers["energy_consumption"].to_numpy()
 purchase_prices = servers["purchase_price"].to_numpy()
 capacity = servers["capacity"].to_numpy()
 
-cpus1_energy= servers[servers["server_generation"] == "CPU.S1"]["energy_consumption"].iloc[0]
-cpus1_purchasecost = servers[servers["server_generation"] == "CPU.S1"]["purchase_price"].iloc[0]
-
-demand2 = demand.merge(datacenters, on="latency_sensitivity", how="left")
-demand3 = demand[demand["latency_sensitivity"] == "low"]
-demands = demand3.drop(columns=["latency_sensitivity","time_step"]).iloc[0:TIMESTEPS].to_numpy()
+# demand3 = demand[demand["latency_sensitivity"] == "low"]
+# demands = demand3.drop(columns=["latency_sensitivity","time_step"]).iloc[0:TIMESTEPS].to_numpy()
 
 selling_prices_array = selling_prices[selling_prices["latency_sensitivity"] == "low"]["selling_price"].to_numpy()
 maint_prices = servers["average_maintenance_fee"].to_numpy()
@@ -145,7 +159,7 @@ def lifespan(x,y):
 
     return life_spans, cumsum
 
-def profit(x, y):
+def profit(demand, x, y, TIMESTEPS, START_STEP):
     #x and y = shape(TIMESTEPS,DATACENTER,SERVERGEN)
     #get cumulative sum of number of servers for all servergens
     revenues = []
@@ -154,17 +168,20 @@ def profit(x, y):
     for datacenter in range(4):
         #get generated revenue at each timestep
         dc_id = index_to_dcid[datacenter]
-        lat_sens = demand2[demand2["datacenter_id"] == dc_id]["latency_sensitivity"].iloc[0]
+        lat_sens = demand[demand["datacenter_id"] == dc_id]["latency_sensitivity"].iloc[0]
         dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == lat_sens]["selling_price"].to_numpy()
         dc_revenues = []
         for i in range(TIMESTEPS):
-            servergen = x[i, datacenter, :]
+            servergen = x[i, datacenter]
             #get demand met
-            supply = y[i, datacenter, :]
+            supply = y[i, datacenter]
             revenue = 0
             for j in range(7):
-                revenue += supply[j] * dc_selling_prices[j].astype("int") * capacity[datacenter]
+                revenue += supply[j] * dc_selling_prices[j].astype("int")
             dc_revenues.append(revenue)
+            #print("revenues",revenue)
+            # if(datacenter == 1):
+            #     print(revenue)
         revenues.append(dc_revenues)
         #calc energycost for all servergens at the datacenter
         energy_costs = server_energies * datacenters[datacenters["datacenter_id"] == dc_id]["cost_of_energy"].to_numpy()
@@ -174,64 +191,55 @@ def profit(x, y):
             #get servers that have been maintained (not new) for that datacenter
             maintained_servers = x[:i, datacenter]
             #calc cost of the new servers and add to overall cost at end
-            new_cost = x[i, datacenter] * np.rint((purchase_prices + energy_costs + maintenance_cost_array[i])).astype("int")
+            new_cost = x[i, datacenter] * np.rint((purchase_prices + energy_costs + maintenance_cost_array[0])).astype("int")
             new_cost = np.sum(new_cost)
             #calc energy + maintenance cost
             energy_and_maint = maintenance_cost_array[:i] + energy_costs
             energy_and_maint = np.rint(energy_and_maint).astype("int")
             #multiply corresponding servers with their cost to get total for servergen at each ts
-            maint_cost = np.sum(np.multiply(maintained_servers, energy_and_maint[:i]))
+            maint_cost = np.sum(np.multiply(maintained_servers, energy_and_maint[:i][::-1]))
+            # print("new:",new_cost)
+            # print("maintained:",maint_cost)
             # if(maint_cost.size <= 0):
             #     maint_cost = np.zeros((7))
-            timestep_costs.append(maint_cost + new_cost)
+            if(maint_cost == 0):
+                timestep_costs.append(new_cost)
+            else:
+                timestep_costs.append(maint_cost + new_cost)
+            #print(maint_cost)
         costs.append(timestep_costs)
+        
 
     #after all of the profits and costs have been calculated for all the datacenters at each timestep,
     #get sum of costs for the datacenters and the sum of profits for all datacenters at each timestep
     costs_sum = np.sum(costs, axis=0)
     revenue_sum = np.sum(revenues, axis=0)
+
     profit_arr = []
     #get profit at each timestep
     for i in range(TIMESTEPS):
         profit_arr.append(revenue_sum[i]-costs_sum[i])
-    # print(revenues[0])
-    # print(len(timestep_costs))
     return profit_arr
 
-    # ts1x = x[0]
-    # ts2x = x[1]
-    # ts1revenue = min(60*ts1x, 4000) * 10
-    # ts2revenue = min(60*ts1x+60*ts2x, 8160) * 10
-
-    # maint_cost = maintenance_cost(x)
-    # ts1cost = (1500 + energycost + maint_cost[0]) * ts1x
-    # ts2cost = (energycost + maint_cost[1]) * ts1x + (energycost + maint_cost[0]) * ts2x
-
-    # ts1p = ts1revenue-ts1cost
-    # ts2p = ts2revenue-ts2cost
-    # return [ts1p, ts2p]
-
-def maintenance_cost(x):
-    return maintenance_cost_array[0:len(x)]
-    # ts1x = x[0]
-    # ts2x = x[1]
-
-    # ts1maintenance = (1+ 1.5/96 * np.log2(1.5/96)) * cpus1_maintenance_cost
-    # ts2maintenance = (1+ 3/96 * np.log2(3/96)) * cpus1_maintenance_cost
-    # return [ts1maintenance, ts2maintenance]
-
-
-def objective_func(x, y):
+def objective_func(demand, x, y, TIMESTEPS, START_STEP):
     x = np.reshape(x,(TIMESTEPS, 4, 7))
     y = np.reshape(y,(TIMESTEPS, 4, 7))
-    P = profit(x, y)
+    P = profit(demand, x, y, TIMESTEPS, START_STEP)
     Objective = np.sum(P)
     return Objective
 
+# %%
 from ortools.linear_solver import pywraplp
 from ortools.constraint_solver import pywrapcp
 
-def max_profit():
+def max_profit(demand, START_STEP, TIMESTEPS):
+    print(demand.columns)
+    demand2 = demand.merge(datacenters, on="latency_sensitivity", how="left")
+    START_STEP2 = START_STEP
+    TIMESTEPS2 = TIMESTEPS
+    START_STEP %= 96
+    TIMESTEPS %= 96
+    print("timesteps:",TIMESTEPS)
     # Create the solver
     solver = pywraplp.Solver.CreateSolver("SAT")
 
@@ -245,15 +253,18 @@ def max_profit():
     for i in range(TIMESTEPS):
         #for all 4 datacenters
         for k in range(4):
+            a = 0
             #generate cpu servers
             for j in range(4):
                 x.append(solver.IntVar(0, int(dc_cap[k]/2), f'x{c}'))
-                y.append(solver.IntVar(0, int(dc_cap[k]/2), f'y{c}'))
+                y.append(solver.IntVar(0, int((dc_cap[k]/2)*capacity[a]), f'y{c}'))
+                a+=1
                 c+=1
             #generate gpu servers
             for j in range(3):
                 x.append(solver.IntVar(0, int(dc_cap[k]/4), f'x{c}'))
-                y.append(solver.IntVar(0, int(dc_cap[k]/4), f'y{c}'))
+                y.append(solver.IntVar(0, int((dc_cap[k]/4)*capacity[a]), f'y{c}'))
+                a+=1
                 c+=1
     # z is the accumulated number of servers at each timestep
     #z = [solver.IntVar(0, int(dc1_cap/2), f'z{i}') for i in range(TIMESTEPS*7)]
@@ -266,49 +277,76 @@ def max_profit():
         for i in range(7):
             rt = eval(release_times[i])
             counter = i
-            for j in range(START_STEP,START_STEP+TIMESTEPS):
+            for j in range(START_STEP2,START_STEP2+TIMESTEPS2):
                 if(j < rt[0] or j > rt[1]):
                     solver.Add(x[start_pos+counter] == 0)
                 counter+=7
 
-    total_x = [0,0,0,0,0,0,0]
+    #get cumulative sum of the servergen at each timesteps
+    cumsum_x = np.reshape(np.array(x), (TIMESTEPS, 28))
+    cumsum_x = np.cumsum(cumsum_x, axis=0)
+    cumsum_x = np.reshape(cumsum_x, (TIMESTEPS, 4, 7))
+
     for timestep in range(TIMESTEPS):
         for datacenter in range(4):
             dc_id = index_to_dcid[datacenter]
-            sens_demand = demand2[demand2["datacenter_id"] == dc_id].drop_duplicates(subset="time_step").to_numpy()
+            sens_demand = demand2[demand2["datacenter_id"] == dc_id].drop_duplicates(subset="time_step")
+            #filter for the timesteps we need
+            sens_demand = sens_demand[sens_demand["time_step"].isin(np.arange(START_STEP2, TIMESTEPS2+START_STEP2))]
+            sens_demand = sens_demand.drop(columns=["time_step","datacenter_id","latency_sensitivity"]).to_numpy().astype("int")
+            #total slots occupied cannot exceed dc capacity at any timeframe
+            solver.Add(np.sum(cumsum_x[timestep][datacenter][:4]*2)+np.sum(cumsum_x[timestep][datacenter][4:]*4)
+                 <= dc_cap[datacenter])
             for servergen in range(7):
                 index = timestep*28+datacenter*7+servergen
-                total_x[servergen] += x[index]
                 if(servergen < 4):
-                    #dc capacity constraint
-                    solver.Add(total_x[servergen]*2 <= dc_cap[datacenter])
+                    #dc capacity constraint for cpu
+                    solver.Add(cumsum_x[timestep][datacenter][servergen]*2 <= dc_cap[datacenter])
                 else:
-                    #dc capacity constraint
-                    solver.Add(total_x[servergen]*4 <= dc_cap[datacenter])
-                #FIX DEMANDS ASWELLLLL!!!!!!
-                solver.Add(y[index] <= demands[timestep][servergen])
-                solver.Add(y[index] <= total_x[servergen]*60)
+                    #dc capacity constraint for gpu
+                    solver.Add(cumsum_x[timestep][datacenter][servergen]*4 <= dc_cap[datacenter])
+                if(datacenter == 2):
+                    #dc3+dc4 demand should be less than sensdemand and less than their total cap
+                    solver.Add(y[index]+y[timestep*28+3*7+servergen] <= sens_demand[timestep][servergen])
+                    solver.Add(y[index]+y[timestep*28+3*7+servergen] <= 
+                        cumsum_x[timestep][datacenter][servergen]*capacity[servergen]+cumsum_x[timestep][datacenter+1][servergen]*capacity[servergen])
+                if(datacenter == 3):
+                    solver.Add(y[index]+y[timestep*28+2*7+servergen] <= sens_demand[timestep][servergen])
+                    solver.Add(y[index]+y[timestep*28+2*7+servergen] <= 
+                        cumsum_x[timestep][datacenter][servergen]*capacity[servergen]+cumsum_x[timestep][datacenter-1][servergen]*capacity[servergen])
+                else:
+                    solver.Add(y[index] <= sens_demand[timestep][servergen])
+                    solver.Add(y[index] <= cumsum_x[timestep][datacenter][servergen]*capacity[servergen])
 
     print("Number of constraints =", solver.NumConstraints())
 
     # Objective
-    solver.Maximize(objective_func(x, y))
-
+    solver.Maximize(objective_func(demand2, x, y, TIMESTEPS, START_STEP))
+    
     # Solve
     status = solver.Solve()
     if status == pywraplp.Solver.OPTIMAL:
         print('Total value =', make_readable(solver.Objective().Value()))
-        for i in range(7):
-            print(f'Item {i}: {x[i].solution_value()}')
+        # for i in range(7):
+        #     print(f'Item {i}: {x[i].solution_value()}')
     else:
         print('The problem does not have an optimal solution.')
 
     if status == pywraplp.Solver.OPTIMAL:
-        result_df = result_to_df(x,y,TIMESTEPS)
+        result_df = result_to_df(x,y,START_STEP,TIMESTEPS)
     else:
         return "no solution"
     
     return result_df
 
-result_df = max_profit()
+# %%
+result_df = max_profit(pd.read_csv("../data/demand.csv"), 11, 48)
 print(result_df)
+
+# %%
+#verify_solution_integrity(result_df)
+
+# %%
+
+
+
