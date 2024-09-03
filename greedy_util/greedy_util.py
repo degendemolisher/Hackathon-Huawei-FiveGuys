@@ -13,11 +13,11 @@ from utils import load_problem_data
 from evaluation import get_actual_demand, get_known
 from system_state import SystemState
 
-DEMAND, DATACENTERS, SERVERS, _ = load_problem_data('../data')
+DEMAND, DATACENTERS, SERVERS, SELLING_PRICES = load_problem_data('../data')
 
 TEST_SEED = 1741
 WINDOW_SIZE = 2
-DISMISS_SERVERS_AT_TIME_STEP = 95
+DISMISS_SERVERS_AT_TIME_STEP = 96
 
 TOTAL_TIME_STEPS = get_known('time_steps')
 LATENCIES = get_known('latency_sensitivity')
@@ -577,8 +577,8 @@ def _allocate_servers(state: SystemState,
         future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, future_srvs)
         
         dismiss_actions = dismiss_servers(state, 
-                                        future_demand_def_exc, 
-                                        processed_servers)
+                                          future_demand_def_exc, 
+                                          processed_servers)
         
         state.update_fleet(dismiss_actions)
         state.update_datacenter_capacity()
@@ -638,8 +638,12 @@ def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
         else:
             actions = _allocate_servers(state, current_demand_srvs)
         
-        state.update_time()
+        if ts == 2:
+            state.update_objective(actual_demand.loc[actual_demand['time_step'] == ts], SELLING_PRICES)
+            print(state)
+        # state.update_time()
         state.update_solution(actions)
+        state.update_time()
     
     return state.solution
 
@@ -653,7 +657,7 @@ def main():
     solution = get_solution(actual_demand, window_size=WINDOW_SIZE)
     
     solution_df = pd.DataFrame(solution)
-    solution_df.to_json(f'../data/solution_ma_w{WINDOW_SIZE}.json', orient='records', indent=4)
+    solution_df.to_json(f'../data/solution_w{WINDOW_SIZE}.json', orient='records', indent=4)
 
 if __name__ == "__main__":
     main()
