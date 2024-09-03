@@ -13,12 +13,13 @@ from seeds import known_seeds
 
 best_submit = 351479106.32757604 # Kwun
 best_submit = 427370482.7219451  # Artem
+best_submit = 402100574.79285 # Artem on test seeds
 
 
 demand, datacenters, servers, selling_prices = load_problem_data('../data')
 
 solution_scores = []
-for seed in tqdm(known_seeds('training')):
+for seed in tqdm(known_seeds('test')):
     # LOAD SOLUTION
     solution = load_solution(f'output/{seed}.json')
     # solution = load_solution('../data/solution_example.json')

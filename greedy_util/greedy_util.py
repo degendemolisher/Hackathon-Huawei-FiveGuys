@@ -601,6 +601,37 @@ def _mean_future_demand_srvs(demand_srvs, ts, window_future):
 
     return mean_future_srvs
 
+def _calculate_volatility(demand_df, window=5):
+    # Ensure time_step is included and set as index
+    demand_df = demand_df.set_index(['time_step', 'server_generation'])
+    
+    # Calculate percentage change for each demand type
+    pct_change = demand_df[['high', 'medium', 'low']].pct_change()
+    
+    # Calculate rolling standard deviation of percentage changes
+    volatility = pct_change.rolling(window=window, min_periods=1).std()
+    
+    # Combine volatilities across latency types
+    volatility['combined_volatility'] = volatility[['high', 'medium', 'low']].mean(axis=1)
+    
+    return volatility.reset_index()
+
+def _get_volatility_thresholds(volatility_data, low_percentile=33, high_percentile=67):
+    # Remove NaN values
+    clean_data = volatility_data.dropna()
+
+    low_threshold = np.percentile(clean_data, low_percentile)
+    high_threshold = np.percentile(clean_data, high_percentile)
+    return {'low': low_threshold, 'high': high_threshold}
+
+def _get_window_size(volatility, thresholds):
+    if volatility < thresholds['low']:
+        return 6  # Look further ahead when volatility is low
+    elif volatility < thresholds['high']:
+        return 4  # Medium look-ahead for medium volatility
+    else:
+        return 2  # Short look-ahead for high volatility
+
 
 def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
     """
@@ -620,31 +651,40 @@ def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
         - It uses a SystemState object to keep track of the current system state.
         - The tqdm library is used to display a progress bar during execution.
     """
+
     state = SystemState(DATACENTERS, SERVERS)
-
-    # ma_actual_demand = calculate_moving_average(actual_demand, window_size=window_size)
-    # gap_actual_demand = get_gap_demand(actual_demand, window_size)
-
     demand_srvs = calculate_servers(actual_demand)
     
-    for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)): 
+    # Calculate initial volatility
+    volatility = _calculate_volatility(actual_demand)
+    
+    # Get volatility thresholds
+    thresholds = _get_volatility_thresholds(volatility['combined_volatility'])
+
+    for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)):
         current_demand_srvs = demand_srvs.loc[demand_srvs['time_step'] == ts]
         
-        if ts % WINDOW_SIZE == 0:
-            # Future demand
-            future_timesteps = range(ts + 1, min(ts + WINDOW_SIZE + 1, TOTAL_TIME_STEPS + 1))
-            future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
-            actions = _allocate_servers(state, current_demand_srvs, future_demand_srvs)
-        else:
-            actions = _allocate_servers(state, current_demand_srvs)
+        # Get current volatility for each server generation
+        current_volatilities = volatility[
+            (volatility['time_step'] == ts) & 
+            (volatility['server_generation'].isin(current_demand_srvs['server_generation']))
+        ]
         
-        if ts == 2:
-            state.update_objective(actual_demand.loc[actual_demand['time_step'] == ts], SELLING_PRICES)
-            print(state)
-        # state.update_time()
+        # Determine window size based on maximum volatility across all server generations
+        max_volatility = current_volatilities['combined_volatility'].max()
+        window_size = _get_window_size(max_volatility, thresholds)
+
+        # Use the determined window size for allocation
+        future_timesteps = range(ts + 1, min(ts + window_size + 1, TOTAL_TIME_STEPS + 1))
+        future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
+        
+        actions = _allocate_servers(state, current_demand_srvs, future_demand_srvs)
+        
+        state.update_objective(actual_demand, SELLING_PRICES)
         state.update_solution(actions)
         state.update_time()
     
+    print(state)
     return state.solution
 
 

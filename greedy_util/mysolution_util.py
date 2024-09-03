@@ -12,7 +12,7 @@ from evaluation import get_actual_demand
 
 from greedy_util import get_solution
 
-seeds = known_seeds('training')
+seeds = known_seeds('test')
 
 demand = pd.read_csv('../data/demand.csv')
 for idx, seed in enumerate(seeds):

@@ -168,13 +168,18 @@ class SystemState:
 
         if move_decisions:
             # Create mapping of server_id to new datacenter_id
-            move_dict = { d['server_id']: d['datacenter_id'] for d in move_decisions }
+            new_dc_map = { d['server_id']: d['datacenter_id'] for d in move_decisions }
+            latency_map = dict(zip(self.datacenter_info['datacenter_id'], self.datacenter_info['latency_sensitivity']))
 
             # Servers to be moved
-            move_mask = self.fleet['server_id'].isin(move_dict.keys())
+            move_mask = self.fleet['server_id'].isin(new_dc_map.keys())
 
             # Update datacenter_id for moved servers
-            self.fleet.loc[move_mask, 'datacenter_id'] = self.fleet.loc[move_mask, 'server_id'].map(move_dict)
+            dc_ids = self.fleet.loc[move_mask, 'server_id'].map(new_dc_map)
+            latency_sensitivities = dc_ids.map(latency_map)
+
+            self.fleet.loc[move_mask, 'datacenter_id'] = dc_ids
+            self.fleet.loc[move_mask, 'latency_sensitivity'] = latency_sensitivities
             self.fleet.loc[move_mask, 'moved'] = 1
 
 
