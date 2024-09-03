@@ -1,5 +1,3 @@
-import ast
-import json
 import pandas as pd
 
 from evaluation import *
@@ -16,13 +14,13 @@ class SystemState:
         time_step (int): The current time step in the simulation.
         fleet (pd.DataFrame): DataFrame containing information about all servers in the fleet.
         datacenter_capacity (pd.DataFrame): DataFrame tracking datacenters' slot capacities.
-        performance_metrics (dict): Dictionary storing current U, L, and P metrics.
+        objective (dict): Dictionary storing current U, L, and P metrics.
         solution (list): List of all actions taken in the simulation.
     """
 
 
     def __init__(self, datacenters: pd.DataFrame, servers: pd.DataFrame):
-        self.time_step = 0
+        self.time_step = 1
         self.fleet = pd.DataFrame({
             'datacenter_id':           pd.Series(dtype='string'),
             'server_generation':       pd.Series(dtype='string'),
@@ -35,6 +33,7 @@ class SystemState:
             'average_maintenance_fee': pd.Series(dtype='int'),
             'energy_consumption':      pd.Series(dtype='int'),
             'cost_of_energy':          pd.Series(dtype='int'),
+            'cost_of_moving':          pd.Series(dtype='int'),
             'moved':                   pd.Series(dtype='int')
         })
         
@@ -43,7 +42,7 @@ class SystemState:
         self.datacenter_capacity['used_slots'] = 0
         self.datacenter_capacity['total_capacity'] = 0
 
-        self.performance_metrics = {'U': 0, 'L': 0, 'P': 0}
+        self.objective = {'time-step': self.time_step, 'O': 0, 'U': 0, 'L': 0, 'P': 0}
         self.solution = []
 
         # Convert the 'release_time' column from string to list
@@ -51,6 +50,12 @@ class SystemState:
 
         self.servers_info = servers
         self.datacenter_info = datacenters
+
+
+    def __str__(self) -> str:
+        obj = self.objective.copy()
+        obj['O'] = round(self.objective['O'], 2)
+        return str(obj)
 
 
     def update_state(self, decision):
@@ -125,15 +130,6 @@ class SystemState:
         if buy_decisions:
             buy_df = pd.DataFrame(buy_decisions)
             
-            # print(buy_df['datacenter_id'].dtype)
-            # print(buy_df['datacenter_id'].head())
-            # print(self.datacenter_info['datacenter_id'].dtype)
-            # print(self.datacenter_info['datacenter_id'].head())
-
-            # # Check for any list-like values
-            # print(buy_df['datacenter_id'].apply(lambda x: isinstance(x, list)).any())
-            # print(self.datacenter_info['datacenter_id'].apply(lambda x: isinstance(x, list)).any())
-            
             # Merge with datacenter_info
             buy_df = buy_df.merge(
                 self.datacenter_info, 
@@ -146,8 +142,7 @@ class SystemState:
                 self.servers_info.drop('release_time', axis=1), 
                 on='server_generation', how='left'
             )
-            # 3/4 columns from datacenetrs.csv
-            # 7/10 columns from servers.csv
+            
             # Create DataFrame for new servers
             new_servers = pd.DataFrame({
                 'datacenter_id':           buy_df['datacenter_id'],
@@ -161,6 +156,7 @@ class SystemState:
                 'average_maintenance_fee': buy_df['average_maintenance_fee'],
                 'energy_consumption':      buy_df['energy_consumption'],
                 'cost_of_energy':          buy_df['cost_of_energy'],
+                'cost_of_moving':          buy_df['cost_of_moving'],
                 'moved':                   0
             })
 
@@ -221,18 +217,6 @@ class SystemState:
             .reset_index()
         )
 
-        # Calculate total slots used and total capacity for each datacenter
-        # datacenter_stats = (
-        #     server_counts
-        #     .groupby('datacenter_id')
-        #     .agg({
-        #         'count': lambda x: (x * server_counts.loc[x.index, 'slots_size']).sum(),
-        #         'capacity': lambda x: (x * server_counts.loc[x.index, 'capacity']).sum()
-        #     })
-        #     .rename(columns={'count': 'used_slots', 'capacity': 'total_capacity'})
-        #     .reset_index()
-        # )
-
         # Ensure all datacenters are present in the stats
         all_datacenters = self.datacenter_capacity['datacenter_id'].unique()
         missing_datacenters = set(all_datacenters) - set(datacenter_stats['datacenter_id'])
@@ -273,64 +257,43 @@ class SystemState:
         # thx Jamie for reminder
         self.fleet['lifespan'] += ts
 
+        # Update server lifespan and dismiss servers which are too old
+        # self.fleet = update_check_lifespan(self.fleet)
 
-    def update_metrics(self, U=None, L=None, P=None):
+
+    def update_objective(self, demand, selling_prices):
         """
-        Update performance metrics U, L, and P.
+        Calculate and update the objectives O, U, L and P for a given fleet, 
+            demand at time step, and selling prices.
 
         Args:
-            U (float, optional): Utilization metric.
-            L (float, optional): Normalized lifespan metric.
-            P (float, optional): Profit metric.
-
-        Raises:
-            ValueError: If no metrics are provided.
-        """
-        if U is None and L is None and P is None:
-            raise ValueError("At least one metric (U, L, or P) must be provided.")
-        
-        if U is not None:
-            self.performance_metrics['U'] = U
-        if L is not None:
-            self.performance_metrics['L'] = L
-        if P is not None:
-            self.performance_metrics['P'] = P
-
-
-    def get_formatted_solution(self):
-        return json.dumps(self.solution)
-    
-    @staticmethod
-    def calculate_objective(fleet: pd.DataFrame, 
-                            demand: pd.DataFrame, 
-                            selling_prices: pd.DataFrame, 
-                            time_step: int):
-        """
-        Calculate the combined objectives (U * L * P) for a given fleet, demand, and selling prices.
-
-        Args:
-            fleet (pd.DataFrame): Current server fleet information.
             demand (pd.DataFrame): Demand over time.
             selling_prices (pd.DataFrame): Selling price information.
-            time_step (int): Current time step in the simulation.
 
         Returns:
             Product of utilization (U), normalized lifespan (L), and profit (P).
             Returns 0 if the fleet is empty.
         """
-        if fleet.empty:
-            return 0
         
-        # Calculate U (utilization)
-        D = get_time_step_demand(get_actual_demand(demand), time_step)
-        Zf = get_capacity_by_server_generation_latency_sensitivity(fleet)
+        # Calculate U (utilizatio n)
+        D = get_time_step_demand(demand, self.time_step)
+        Zf = get_capacity_by_server_generation_latency_sensitivity(self.fleet)
         U = get_utilization(D, Zf)
 
         # Calculate L (normalized lifespan)
-        L = get_normalized_lifespan(fleet)
+        L = get_normalized_lifespan(self.fleet)
 
         # Calculate P (profit)
         selling_prices = change_selling_prices_format(selling_prices)
-        P = get_profit(D, Zf, selling_prices, fleet)
-
-        return U * L * P
+        P = get_profit(D, Zf, selling_prices, self.fleet)
+        
+        # Calculate O (objective)
+        obj = U * L * P
+        O = self.objective['O'] + obj
+        
+        # Update
+        self.objective['time-step'] = self.time_step
+        self.objective['O'] = O
+        self.objective['U'] = round(U, 2)
+        self.objective['L'] = round(L, 2)
+        self.objective['P'] = round(P, 2)

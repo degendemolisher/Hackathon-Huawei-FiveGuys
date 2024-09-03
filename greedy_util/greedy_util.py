@@ -525,7 +525,7 @@ def _process_server_dismissals(dc_costs: pd.DataFrame, dismissable_servers: pd.D
 
 def _allocate_servers(state: SystemState, 
                       demand: pd.DataFrame, 
-                      mean_future_srvs: pd.DataFrame = pd.DataFrame()) -> List[Dict]:
+                      future_srvs: pd.DataFrame = pd.DataFrame()) -> List[Dict]:
     """
     Allocate servers based on the current system state and demand.
 
@@ -538,6 +538,7 @@ def _allocate_servers(state: SystemState,
     Args:
         state (SystemState): The current state of the system, including fleet and datacenter information.
         demand (pd.DataFrame): The current demand for servers.
+        future_srvs (pd.DataFrame): The future demand for servers WINDOW_SIZE steps ahead.
 
     Returns:
         List[Dict]: A list of all actions taken (dismiss, move, buy) to optimize server allocation.
@@ -571,9 +572,9 @@ def _allocate_servers(state: SystemState,
 
     # Dismiss unused servers
     # Check if future demand is lower
-    if not mean_future_srvs.empty:
+    if not future_srvs.empty:
         srvs_cnt = srvs_count(state.fleet)
-        future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, mean_future_srvs)
+        future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, future_srvs)
         
         dismiss_actions = dismiss_servers(state, 
                                         future_demand_def_exc, 
