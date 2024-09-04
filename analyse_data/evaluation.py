@@ -1,3 +1,5 @@
+
+
 import logging
 import numpy as np
 import pandas as pd
@@ -45,11 +47,6 @@ def get_known(key):
                 'action']
     elif key == 'time_steps':
         return 168
-    elif key == 'datacenter_fields':
-        return ['datacenter_id', 
-                'cost_of_energy',
-                'latency_sensitivity', 
-                'slots_capacity']
 
 
 def solution_data_preparation(solution, servers, datacenters, selling_prices):
@@ -102,7 +99,7 @@ def check_server_usage_by_release_time(solution):
     # CHECK THAT ONLY THE SERVERS AVAILABLE FOR PURCHASE AT A CERTAIN TIME-STEP
     # ARE USED AT THAT TIME-STEP
     solution['rt_is_fine'] = solution.apply(check_release_time, axis=1)
-    solution = solution[(solution['rt_is_fine'] != 'buy') | solution['rt_is_fine']]
+    solution = solution[solution['rt_is_fine']]
     solution = solution.drop(columns='rt_is_fine', inplace=False)
     return solution
 
@@ -178,8 +175,8 @@ def get_time_step_demand(demand, ts):
 
 
 def get_time_step_fleet(solution, ts):
-    # GET THE SOLUTION AT A SPECIFIC TIME-STEP 
-    if ts in solution['time_step'].values:
+    # GET THE SOLUTION AT A SPECIFIC TIME-STEP t
+    if ts in solution['time_step']:
         s = solution[solution['time_step'] == ts]
         s = s.drop_duplicates('server_id', inplace=False)
         s = s.set_index('server_id', drop=False, inplace=False)
@@ -208,13 +205,13 @@ def get_valid_columns(cols1, cols2):
 
 def adjust_capacity_by_failure_rate(x):
     # HELPER FUNCTION TO CALCULATE THE FAILURE RATE f
-    return int(x * (1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item()))
+    return int(x * 1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item())
 
 
 def check_datacenter_slots_size_constraint(fleet):
     # CHECK DATACENTERS SLOTS SIZE CONSTRAINT
     slots = fleet.groupby(by=['datacenter_id']).agg({'slots_size': 'sum',
-                                                     'slots_capacity': 'mean'})
+                                                        'slots_capacity': 'mean'})
     test = slots['slots_size'] > slots['slots_capacity']
     constraint = test.any()
     if constraint:
@@ -271,13 +268,12 @@ def get_revenue(D, Z, selling_prices):
 
 
 def get_cost(fleet):
-    # CALCULATE THE SERVER COST - PART 1
+    # CALCULATE THE COST
     fleet['cost'] = fleet.apply(calculate_server_cost, axis=1)
     return fleet['cost'].sum()
 
 
 def calculate_server_cost(row):
-    # CALCULATE THE SERVER COST - PART 2
     c = 0
     r = row['purchase_price']
     b = row['average_maintenance_fee']
@@ -295,12 +291,10 @@ def calculate_server_cost(row):
 
 
 def get_maintenance_cost(b, x, xhat):
-    # CALCULATE THE CURRENT MAINTENANCE COST
     return b * (1 + (((1.5)*(x))/xhat * np.log2(((1.5)*(x))/xhat)))
 
 
 def update_fleet(ts, fleet, solution):
-    # UPADATE THE FLEET ACCORDING TO THE ACTIONS AT THE CURRENT TIMESTEP
     if fleet.empty:
         fleet = solution.copy()
         fleet['lifespan'] = 0
@@ -313,9 +307,7 @@ def update_fleet(ts, fleet, solution):
         # MOVE
         if 'move' in server_id_action:
             s = server_id_action['move']
-            dc_fields = get_known('datacenter_fields')
-            fleet.loc[s, dc_fields] = solution.loc[s, dc_fields]
-            fleet.loc[s, 'selling_price'] = solution.loc[s, 'selling_price']
+            fleet.loc[s, 'datacenter_id'] = solution.loc[s, 'datacenter_id']
             fleet.loc[s, 'moved'] = 1
         # HOLD
             # do nothing
@@ -328,16 +320,13 @@ def update_fleet(ts, fleet, solution):
 
 def put_fleet_on_hold(fleet):
     fleet['action'] = 'hold'
-    fleet['moved'] = 0
     return fleet
 
 
 def update_check_lifespan(fleet):
-    # INCREASE LIFESPAN COUNTER AND DROP SERVERS THAT HAVE ACHIEVED THEIR
-    # LIFE EXPECTANCY
     fleet['lifespan'] = fleet['lifespan'].fillna(0)
     fleet['lifespan'] += 1
-    fleet = fleet.drop(fleet.index[fleet['lifespan'] > fleet['life_expectancy']], inplace=False)
+    fleet = fleet.drop(fleet.index[fleet['lifespan'] >= fleet['life_expectancy']], inplace=False)
     return fleet
 
 
@@ -361,27 +350,22 @@ def get_evaluation(solution,
 
     # DEMAND DATA PREPARATION
     demand = get_actual_demand(demand)
+
     OBJECTIVE = 0
     FLEET = pd.DataFrame()
     # if ts-related fleet is empty then current fleet is ts-fleet
     for ts in range(1, time_steps+1):
-
         # GET THE ACTUAL DEMAND AT TIMESTEP ts
         D = get_time_step_demand(demand, ts)
 
         # GET THE SERVERS DEPLOYED AT TIMESTEP ts
         ts_fleet = get_time_step_fleet(solution, ts)
 
-        if ts_fleet.empty and not FLEET.empty:
+        if ts_fleet.empty:
             ts_fleet = FLEET
-        elif ts_fleet.empty and FLEET.empty:
-            continue
 
         # UPDATE FLEET
         FLEET = update_fleet(ts, FLEET, ts_fleet)
-
-        if(ts==1):
-            print(FLEET.columns)
   
         # CHECK IF THE FLEET IS EMPTY
         if FLEET.shape[0] > 0:
@@ -402,7 +386,7 @@ def get_evaluation(solution,
                            FLEET)
             o = U * L * P
             OBJECTIVE += o
-
+            
             # PUT ENTIRE FLEET on HOLD ACTION
             FLEET = put_fleet_on_hold(FLEET)
 
@@ -422,7 +406,7 @@ def get_evaluation(solution,
 
         if verbose:
             print(output)
-            
+
     return OBJECTIVE
 
 
@@ -470,23 +454,16 @@ def evaluation_function(solution,
     # SET RANDOM SEED
     np.random.seed(seed)
     # EVALUATE SOLUTION
-    # try:
-    #     return get_evaluation(solution, 
-    #                           demand,
-    #                           datacenters,
-    #                           servers,
-    #                           selling_prices,
-    #                           time_steps=time_steps, 
-    #                           verbose=verbose)
-    # # CATCH EXCEPTIONS
-    # except Exception as e:
-    #     logger.error(e)
-    #     return None
+    try:
+        return get_evaluation(solution, 
+                              demand,
+                              datacenters,
+                              servers,
+                              selling_prices,
+                              time_steps=time_steps, 
+                              verbose=verbose)
+    # CATCH EXCEPTIONS
+    except Exception as e:
+        logger.error(e)
+        return None
 
-    return get_evaluation(solution, 
-                            demand,
-                            datacenters,
-                            servers,
-                            selling_prices,
-                            time_steps=time_steps, 
-                            verbose=verbose)

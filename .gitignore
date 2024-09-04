@@ -168,3 +168,8 @@ logs/
 output/
 output_training/
 output_test/
+
+# rl_agent branch
+/rl_solver
+mysolutionomer.py
+mysolutionomer.ipynb
