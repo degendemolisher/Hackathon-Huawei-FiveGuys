@@ -40,7 +40,7 @@ class Big:
         ,"GPU.S1","GPU.S2","GPU.S3"]
         dic = {i:[] for i in columns}
         for k in self.latencies:
-            for timestep in range(1,demand["time_step"].max()):
+            for timestep in range(1,demand["time_step"].max()+1):
                 dic["time_step"].append(timestep)
                 dic["latency_sensitivity"].append(k)
                 gens_with_demand = []

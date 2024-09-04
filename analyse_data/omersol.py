@@ -3,7 +3,7 @@ import pandas as pd
 from seeds import known_seeds
 from utils import save_solution
 from evaluation import get_actual_demand
-from max_profit import *
+from max_profit2 import *
 from omerutils import Big
 
 def get_my_solution(d):
@@ -11,7 +11,7 @@ def get_my_solution(d):
     #convert the garbage ass idiot demand format to csv format
     dd = big.csv_format_demand(d)
     ddd = pd.DataFrame.from_dict(dd)
-    result_df = max_profit(ddd,1,167)
+    result_df = max_profit(ddd)
     valid = verify_solution_integrity(result_df)
     if(not valid):
         print("solution has a problem")
