@@ -13,11 +13,11 @@ from utils import load_problem_data
 from evaluation import get_actual_demand, get_known
 from system_state import SystemState
 
-DEMAND, DATACENTERS, SERVERS, _ = load_problem_data('../data')
+DEMAND, DATACENTERS, SERVERS, SELLING_PRICES = load_problem_data('../data')
 
 TEST_SEED = 1741
-MA_WINDOW_SIZE = 24
-DISMISS_SERVERS_AT_TIME_STEP = 95
+WINDOW_SIZE = 2
+DISMISS_SERVERS_AT_TIME_STEP = 96
 
 TOTAL_TIME_STEPS = get_known('time_steps')
 LATENCIES = get_known('latency_sensitivity')
@@ -34,24 +34,30 @@ LATENCY_TO_DC = {
 }
 
 
-def calculate_moving_average(actual_demand, window_size=6):
+def get_gap_demand(actual_demand: pd.DataFrame, gap_size: int) -> pd.DataFrame:
+    gap_dfs = []
+    server_generations = actual_demand['server_generation'].unique()
+
+    for generation in server_generations:
+        df_gen = actual_demand[actual_demand['server_generation'] == generation]
+        gap_df = df_gen[df_gen['time_step'] % gap_size == 0]
+        gap_dfs.append(gap_df)
+
+    return pd.concat(gap_dfs, ignore_index=True).sort_values('time_step')
+
+
+def calculate_moving_average(demand_df, window_size):
     # Group by server_generation
-    grouped = actual_demand.groupby('server_generation')
+    grouped = demand_df.groupby('server_generation')
     
-    # Calculate moving average for each group
-    ma_dfs = []
-
-    for _, group in grouped:
-        ma_df = group.copy()
-
+    # Function to calculate moving average for a group
+    def group_moving_average(group):
         for col in ['high', 'low', 'medium']:
-            ma_df[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
-
-        ma_dfs.append(ma_df)
+            group[col] = group[col].rolling(window=window_size, min_periods=1).mean().round().astype(int)
+        return group
     
-    # Combine all moving average dataframes
-    ma_actual_demand = pd.concat(ma_dfs).sort_index()
-    return ma_actual_demand
+    # Apply moving average calculation to each group
+    return grouped.apply(group_moving_average).reset_index(drop=True)
 
 
 def calculate_servers(actual_demand: pd.DataFrame) -> pd.DataFrame:
@@ -517,7 +523,9 @@ def _process_server_dismissals(dc_costs: pd.DataFrame, dismissable_servers: pd.D
     return actions, processed_servers, datacenters_df
 
 
-def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
+def _allocate_servers(state: SystemState, 
+                      demand: pd.DataFrame, 
+                      future_srvs: pd.DataFrame = pd.DataFrame()) -> List[Dict]:
     """
     Allocate servers based on the current system state and demand.
 
@@ -530,6 +538,7 @@ def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
     Args:
         state (SystemState): The current state of the system, including fleet and datacenter information.
         demand (pd.DataFrame): The current demand for servers.
+        future_srvs (pd.DataFrame): The future demand for servers WINDOW_SIZE steps ahead.
 
     Returns:
         List[Dict]: A list of all actions taken (dismiss, move, buy) to optimize server allocation.
@@ -562,18 +571,69 @@ def _allocate_servers(state: SystemState, demand: pd.DataFrame) -> List[Dict]:
     all_action += buy_actions
 
     # Dismiss unused servers
-    dismiss_actions = dismiss_servers(state, 
-                                      updated_demand_def_exc, 
-                                      processed_servers)
-    
-    state.update_fleet(dismiss_actions)
-    state.update_datacenter_capacity()
-    all_action += dismiss_actions
+    # Check if future demand is lower
+    if not future_srvs.empty:
+        srvs_cnt = srvs_count(state.fleet)
+        future_demand_def_exc = calculate_demand_def_exc(srvs_cnt, future_srvs)
+        
+        dismiss_actions = dismiss_servers(state, 
+                                          future_demand_def_exc, 
+                                          processed_servers)
+        
+        state.update_fleet(dismiss_actions)
+        state.update_datacenter_capacity()
+        all_action += dismiss_actions
 
     return all_action
 
 
-def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]:
+def _mean_future_demand_srvs(demand_srvs, ts, window_future):
+    # Calculate mean demand for next 6 timesteps
+    future_timesteps = range(ts + 1, min(ts + window_future + 1, TOTAL_TIME_STEPS + 1))
+    future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
+
+    # Calculate mean future demand while maintaining structure
+    mean_future_srvs = future_demand_srvs.groupby('server_generation')[['high', 'medium', 'low']].mean().astype(int).reset_index()
+    mean_future_srvs['time_step'] = ts  # Use current timestep
+            
+    # Reorder columns to match the original structure
+    mean_future_srvs = mean_future_srvs[['time_step', 'server_generation', 'high', 'medium', 'low']]
+
+    return mean_future_srvs
+
+def _calculate_volatility(demand_df, window=5):
+    # Ensure time_step is included and set as index
+    demand_df = demand_df.set_index(['time_step', 'server_generation'])
+    
+    # Calculate percentage change for each demand type
+    pct_change = demand_df[['high', 'medium', 'low']].pct_change()
+    
+    # Calculate rolling standard deviation of percentage changes
+    volatility = pct_change.rolling(window=window, min_periods=1).std()
+    
+    # Combine volatilities across latency types
+    volatility['combined_volatility'] = volatility[['high', 'medium', 'low']].mean(axis=1)
+    
+    return volatility.reset_index()
+
+def _get_volatility_thresholds(volatility_data, low_percentile=33, high_percentile=67):
+    # Remove NaN values
+    clean_data = volatility_data.dropna()
+
+    low_threshold = np.percentile(clean_data, low_percentile)
+    high_threshold = np.percentile(clean_data, high_percentile)
+    return {'low': low_threshold, 'high': high_threshold}
+
+def _get_window_size(volatility, thresholds):
+    if volatility < thresholds['low']:
+        return 6  # Look further ahead when volatility is low
+    elif volatility < thresholds['high']:
+        return 4  # Medium look-ahead for medium volatility
+    else:
+        return 2  # Short look-ahead for high volatility
+
+
+def get_solution(actual_demand: pd.DataFrame, window_size: int) -> List[Dict]:
     """
     Generate a solution for server allocation based on actual demand over time.
 
@@ -591,31 +651,53 @@ def get_solution(actual_demand: pd.DataFrame, ma_window_size: int) -> List[Dict]
         - It uses a SystemState object to keep track of the current system state.
         - The tqdm library is used to display a progress bar during execution.
     """
-    state = SystemState(DATACENTERS, SERVERS)
 
-    ma_actual_demand = calculate_moving_average(actual_demand, window_size=ma_window_size)
-    demand_srvs = calculate_servers(ma_actual_demand)
+    state = SystemState(DATACENTERS, SERVERS)
+    demand_srvs = calculate_servers(actual_demand)
     
-    for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)): 
-        current_demand_srvs = demand_srvs.loc[ma_actual_demand['time_step'] == ts]
-        actions = _allocate_servers(state, current_demand_srvs)
+    # Calculate initial volatility
+    volatility = _calculate_volatility(actual_demand)
+    
+    # Get volatility thresholds
+    thresholds = _get_volatility_thresholds(volatility['combined_volatility'])
+
+    for ts in tqdm(range(1, TOTAL_TIME_STEPS + 1)):
+        current_demand_srvs = demand_srvs.loc[demand_srvs['time_step'] == ts]
         
-        state.update_time()
+        # Get current volatility for each server generation
+        current_volatilities = volatility[
+            (volatility['time_step'] == ts) & 
+            (volatility['server_generation'].isin(current_demand_srvs['server_generation']))
+        ]
+        
+        # Determine window size based on maximum volatility across all server generations
+        max_volatility = current_volatilities['combined_volatility'].max()
+        window_size = _get_window_size(max_volatility, thresholds)
+
+        # Use the determined window size for allocation
+        future_timesteps = range(ts + 1, min(ts + window_size + 1, TOTAL_TIME_STEPS + 1))
+        future_demand_srvs = demand_srvs.loc[demand_srvs['time_step'].isin(future_timesteps)]
+        
+        actions = _allocate_servers(state, current_demand_srvs, future_demand_srvs)
+        
+        state.update_objective(actual_demand, SELLING_PRICES)
         state.update_solution(actions)
+        state.update_time()
     
+    print(state)
     return state.solution
 
 
 def main():
-    print(f'[TEST MODE]: Seed used: {TEST_SEED}; MA Window size: {MA_WINDOW_SIZE}')
+    print(f'[TEST MODE]: Seed used: {TEST_SEED}; Window size: {WINDOW_SIZE}')
 
     np.random.seed(TEST_SEED)
 
     actual_demand = get_actual_demand(DEMAND)
-    solution = get_solution(actual_demand, ma_window_size=MA_WINDOW_SIZE)
+    solution = get_solution(actual_demand, window_size=WINDOW_SIZE)
     
     solution_df = pd.DataFrame(solution)
-    solution_df.to_json(f'../data/solution_ma_w{MA_WINDOW_SIZE}.json', orient='records', indent=4)
+    solution_df.to_json(f'../data/solution_w{WINDOW_SIZE}.json', orient='records', indent=4)
 
 if __name__ == "__main__":
     main()
