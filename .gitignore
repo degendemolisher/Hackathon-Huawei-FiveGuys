@@ -166,3 +166,5 @@ logs/
 
 # evaluation output
 output/
+output_training/
+output_test/

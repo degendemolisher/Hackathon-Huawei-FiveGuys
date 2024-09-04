@@ -2,29 +2,23 @@ import numpy as np
 import pandas as pd
 from greedy_profit_v2.data import get_slot_size, get_sorted_servers, break_even_time_all, servers
 from greedy_profit_v2.demand_ranges import get_demand_ranges, merge_close_ranges
+from greedy_profit_v2.remaining_slot_decrement_algorithm import remaining_slots_decrement_algorithm
 
 
 def greedy_profit_algorithm(actual_demand: pd.DataFrame):
     results = []
 
-    # 1) For each server/latency combination (in order of profitability):
+    # 1) Initialise a DataFrame that tracks the remaining slots of each datacentre at each time step
+    datacenter_slot_capacities = { 'DC1': 25245, 'DC2': 15300, 'DC3': 7020, 'DC4': 8280 }
+    remaining_slots = pd.DataFrame(datacenter_slot_capacities, index=range(1, 169), columns=['DC1', 'DC2', 'DC3', 'DC4']).rename_axis('time_step')
+    # print(remaining_slots)
+
+    # 2) For each server/latency combination (in order of profitability):
     sorted_servers = get_sorted_servers('data/test_data/most_profitable_servers_by_artem.csv')
     for server_generation, latency_sensitivity in sorted_servers:
         remaining_demand = actual_demand.copy()
-        slots_size = get_slot_size(server_generation)
 
-        # TEMPORARY
-        if server_generation in ['CPU.S1', 'CPU.S2']:
-            continue
 
-        if latency_sensitivity == 'low':
-            datacenter_id = 'DC1'
-        elif latency_sensitivity == 'medium':
-            datacenter_id = 'DC2'
-        elif latency_sensitivity == 'high':
-            datacenter_id = 'DC3'
-
-        print(f"Server generation: {server_generation}, Latency sensitivity: {latency_sensitivity}")
         while True:
             # 1) Find the ranges of time steps between which this server/latency is in demand
             relevant_demand = remaining_demand.query(f'server_generation == @server_generation and {latency_sensitivity} > 0')
@@ -56,15 +50,9 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
                 # print(f"{min_demand}/{capacity} = {min_demand / capacity} ~~ {str(desired_buy_count)} GPUs to buy")
 
 
-                # 3) Store the number of servers to buy, which data centre, the buy time step, the dismiss time step
-                results.append({
-                    'server_generation': server_generation,
-                    'buy_count': str(desired_buy_count),
-                    'datacenter_id': datacenter_id,
-                    'buy_time_step': str(current_range[0]),
-                    'dismiss_time_step': str(current_range[1] + 1)
-                })
-
+                # 3) Perform the Remaining Slot Decrement Algorithm
+                validated_results, remaining_slots = remaining_slots_decrement_algorithm(latency_sensitivity, server_generation, remaining_slots, desired_buy_count, current_range)
+                results.extend(validated_results)
 
                 # 4) For each demand in the range, subtract the capacity * number of servers to buy
                 demand_to_subtract = desired_buy_count * capacity
@@ -82,7 +70,7 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
             if len(ranges) == 0:
                 results_df = pd.DataFrame(results)
                 total_servers_bought = results_df['buy_count'].astype(int).sum()
-                print(f"Total servers bought: {total_servers_bought}")
+                print(f"{server_generation}, {latency_sensitivity}: Total servers bought: {total_servers_bought}")
                 break
     
     return results

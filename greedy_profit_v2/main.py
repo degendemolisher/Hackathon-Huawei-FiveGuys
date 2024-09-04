@@ -21,14 +21,12 @@ Notes regarding the ADJUSTABLEs:
 - minimum_range_length can probably be increased from break_even_time * 2. Needs experimenting
 
 TODO: See idea.md for the steps
-- In Version 3 of the algorithm, steps 1 and 2.4.3 need to be implemented (the logic for managing datacenter slot capacity)
-    - Use multi_server_latency_with_slot_tracking.ipynb to test the implementation before integrating it in the main files.
 - Develop a move strategy (see suggestion at bottom of idea.md) to improve Lifespan
     - This is likely to be entirely separate from the main algorithm and will only need to reprocess the final actions
 
 """
 
-seeds = known_seeds('training')
+seeds = known_seeds('test')
 
 demand = pd.read_csv('./data/demand.csv')
 for seed in seeds:
