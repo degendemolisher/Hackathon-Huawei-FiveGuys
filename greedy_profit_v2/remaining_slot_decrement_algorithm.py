@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from greedy_profit_v2.data import break_even_time_all, get_slot_size
 
-def remaining_slots_decrement_algorithm(latency: str, server: str, remaining_slots: pd.DataFrame, desired_buy_count: int, time_step_range: tuple[int, int]):
+def remaining_slots_decrement_algorithm(latency: str, server: str, remaining_slots: pd.DataFrame, desired_buy_count: int, time_step_range: tuple[int, int], use_dc4=False):
     results = []
 
     slots_size = get_slot_size(server)
@@ -12,7 +12,10 @@ def remaining_slots_decrement_algorithm(latency: str, server: str, remaining_slo
     elif latency == 'medium':
         datacenter_id = 'DC2'
     elif latency == 'high':
-        datacenter_id = 'DC3'
+        if use_dc4:
+            datacenter_id = 'DC4'
+        else:
+            datacenter_id = 'DC3'
     
     while True:
         # 1) Find the ranges of time steps between which the datacenter can fit at least 1 server
@@ -82,4 +85,4 @@ def remaining_slots_decrement_algorithm(latency: str, server: str, remaining_slo
             break
 
     # 5) Return a tuple of the (results, remaining_slots)
-    return results, remaining_slots
+    return results, remaining_slots, desired_buy_count

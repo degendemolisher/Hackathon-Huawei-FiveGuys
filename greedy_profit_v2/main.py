@@ -18,10 +18,10 @@ These are values that heavily effect how the algorithm will score and should be 
 
 Notes regarding the ADJUSTABLEs:
 - the merge_threshold is somewhere between x2.5 and x6 of min(length, length_next)
-- minimum_range_length can probably be increased from break_even_time * 2. Needs experimenting
+- minimum_range_length is generally optimal at break_even_time * 2. This may be reduced when the move strategy is added
 
 TODO: See idea.md for the steps
-- Develop a move strategy (see suggestion at bottom of idea.md) to improve Lifespan
+- Develop a move strategy to improve lifespan (see idea.md Move Strategy Extension)
     - This is likely to be entirely separate from the main algorithm and will only need to reprocess the final actions
 
 """

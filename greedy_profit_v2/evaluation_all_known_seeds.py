@@ -36,7 +36,7 @@ for seed in tqdm(known_seeds('test')):
                                 verbose=False)
     
     solution_scores.append(score)
-    print(f'Solution score: {score}')
+    print(f'Solution score for {seed}: {score}')
 
 mean = statistics.mean(solution_scores)
 increase = round((mean / best_submit) - 1, 1)

@@ -21,14 +21,14 @@ Remaining Slot Decrement Algorithm (datacenter ID, server generation, remaining 
 1) Find the ranges of time steps between which the datacenter can fit at least 1 server
 2) Filter ranges which last for less than the break even time
 3) For each range (from longest to shortest):
-	1) Calculate the minimum slot capacity
-	2) Pick the minimum of the minimum slot capacity or the number of servers to buy * server slots size
-	3) Store the number of servers to buy, the datacentre, the buy time step, the dismiss time step in the results
-	4) Subtract the number of bought servers from the initial desired number of servers to buy
-	5) For each slot capacity in the range for the datacenter, decrease the slot capacity by the result of step 3.2
-4) Repeat steps 1 to 3.3 until there are no ranges left after step 2 or the all desired servers were purchased
-5) Return a tuple of the (results, remaining_slots)
-
+    1) Calculate the minimum slot capacity
+    2) Pick the minimum of the minimum slot capacity or the number of servers to buy * server slots size
+    3) Store the number of servers to buy, the datacentre, the buy time step, the dismiss time step in the results
+    4) Subtract the number of bought servers from the initial desired number of servers to buy
+    5) For each slot capacity in the range for the datacenter, decrease the slot capacity by the result of step 3.2
+5) Repeat steps 1 to 3.3 until there are no ranges left after step 2 or the all desired servers were purchased
+	1) If there are no ranges and desired servers > 0 and the datacenter is DC3, change the datacenter to DC4 and repeat steps 1 to 3.3
+6) Return a tuple of the (results, remaining_slots)
 
 
 Suggestions:

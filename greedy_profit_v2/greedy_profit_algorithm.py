@@ -51,8 +51,13 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
 
 
                 # 3) Perform the Remaining Slot Decrement Algorithm
-                validated_results, remaining_slots = remaining_slots_decrement_algorithm(latency_sensitivity, server_generation, remaining_slots, desired_buy_count, current_range)
+                validated_results, remaining_slots, leftover_buy_count = remaining_slots_decrement_algorithm(latency_sensitivity, server_generation, remaining_slots, desired_buy_count, current_range)
                 results.extend(validated_results)
+
+                # 3.1) If there are leftover serveers to buy and the latency is high, perform the Remaining Slot Decrement Algorithm with DC4
+                if latency_sensitivity == 'high' and leftover_buy_count > 0:
+                    dc4_results, remaining_slots, _dc4_leftover_buy_count = remaining_slots_decrement_algorithm(latency_sensitivity, server_generation, remaining_slots, leftover_buy_count, current_range, use_dc4=True)
+                    results.extend(dc4_results)
 
                 # 4) For each demand in the range, subtract the capacity * number of servers to buy
                 demand_to_subtract = desired_buy_count * capacity
