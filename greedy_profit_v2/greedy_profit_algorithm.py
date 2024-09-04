@@ -73,4 +73,7 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
                 print(f"{server_generation}, {latency_sensitivity}: Total servers bought: {total_servers_bought}")
                 break
     
+    # DEBUG: Save remaining slots to CSV
+    remaining_slots.to_csv('./remaining_slots.csv', sep='\t', encoding='utf-8')
+
     return results

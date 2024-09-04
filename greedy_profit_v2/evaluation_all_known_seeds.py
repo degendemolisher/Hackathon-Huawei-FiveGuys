@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
 from utils import (load_problem_data,
                    load_solution)
-from evaluation import evaluation_function
+from evaluation_v6 import evaluation_function
 from seeds import known_seeds
 
 best_submit = 351479106.32757604 # Kwun
