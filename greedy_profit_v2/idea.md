@@ -42,17 +42,18 @@ Suggestions:
 After all the core algorithm is processed, you have 2 arrays representing the solution:
 - The "results" of the algorithm (see remaining slot decrement algorithm step 3.3 for format)
 - The "actions" of the algorithm (the actual format of a submitted solution)
-1) Filter the results into different arrays for each server generation
-2) For each server generation's results
-	1) For each result (from highest to lowest buy time step)
-		2) Search for a result of the same server generation which has a dismiss time step briefly before the this result's buy time step (based on some threshold e.g. >= 5 time steps before)
-		3) Validate that the difference between the earlier buy time step and the later dismiss time step doesn't exceed the life expectancy (96)
-		4) Calculate the number of servers to move: the minimum buy count of either result
-		5) Find the server IDs of the servers to move from the actions array
-		6) Construct move actions for each server to move to replace the buy/dismiss actions.
+1) For each server generation's results
+	1) Sort results by operating time (dismiss time step - buy time step)
+	2) Filter results with an operating time > life expectancy
+	3) For each result (from shortest to longest server operating time)
+		1) Search for a result of the same server generation which has a dismiss time step briefly before the this result's buy time step (based on some threshold e.g. >= 5 time steps before)
+		2) Validate that the difference between the earlier buy time step and the later dismiss time step doesn't exceed the life expectancy (96)
+		3) Calculate the number of servers to move: the minimum buy count of either result
+		4) Find the server IDs of the servers to move from the actions array
+		5) Construct move actions for each server to move to replace the buy/dismiss actions.
 			1) If the datacenter moved from has better energy efficiency, perform the move at the same time step as the dismiss
 			2) If the datacenter moved to has better energy efficiency, perform the move at the same time step as the buy
-		7) Delete the corresponding buy and dismiss actions from the actions array
+		6) Delete the corresponding buy and dismiss actions from the actions array
 
 
 

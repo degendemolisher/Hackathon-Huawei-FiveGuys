@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pandas as pd
 from greedy_profit_v2.data import get_slot_size, get_sorted_servers, break_even_time_all, servers
@@ -41,7 +42,7 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
 
                 # 1) Calculate the minimum demand across that range
                 demand_in_range = relevant_demand.query(f'time_step >= @current_range[0] and time_step <= @current_range[1]')
-                min_demand = demand_in_range.min()[latency_sensitivity]
+                min_demand = demand_in_range[latency_sensitivity].quantile(0.375)
 
 
                 # 2) Calculate the number of servers to buy meet the minimum demand
@@ -80,5 +81,8 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
     
     # DEBUG: Save remaining slots to CSV
     remaining_slots.to_csv('./remaining_slots.csv', sep='\t', encoding='utf-8')
+    # DEBUG: Save raw results to JSON
+    with open('./results.json', 'w') as f:
+        json.dump(results, f, indent=4)
 
     return results
