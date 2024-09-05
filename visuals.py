@@ -37,13 +37,13 @@ class DatacenterSlotTracker():
                         'server_generation': server_gen,
                         'buy_time': time_step
                     }
-                    for t in range(time_step, min(time_step + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP) + 1):
+                    for t in range(time_step, min(time_step + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP)):
                         self.slots_used[dc_id][server_gen][t] += slots
                 elif action['action'] == 'dismiss':
                     if server_id in self.servers:
                         buy_time = self.servers[server_id]['buy_time']
                         server_gen = self.servers[server_id]['server_generation']
-                        for t in range(time_step, min(buy_time + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP) + 1):
+                        for t in range(time_step, min(buy_time + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP)):
                             self.slots_used[dc_id][server_gen][t] -= slots
                         del self.servers[server_id]
 
