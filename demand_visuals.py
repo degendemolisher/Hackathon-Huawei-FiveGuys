@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import json
+import glob
 
 from evaluation_v6 import *
 from seeds import known_seeds
@@ -111,7 +112,12 @@ class DemandTracker():
                 ax.legend()
         
         plt.tight_layout()
-        plt.show()
+        output_dir = 'visuals/demand'
+        os.makedirs(output_dir, exist_ok=True)
+        base_name = os.path.splitext(os.path.basename(self.json_filename))[0]
+        output_file = os.path.join(output_dir, f"{base_name}.png")
+        plt.savefig(output_file)
+        plt.close()
 
     def run(self):
         self.process_actions()

@@ -73,10 +73,10 @@ class DatacenterSlotTracker():
             ax.legend(loc='upper left')
 
         plt.tight_layout()
-        output_dir = 'visuals'
+        output_dir = 'visuals/slots_used'
         os.makedirs(output_dir, exist_ok=True)
         base_name = os.path.splitext(os.path.basename(self.json_filename))[0]
-        output_file = os.path.join(output_dir, f"{base_name}_slots_occupancy_by_dc.png")
+        output_file = os.path.join(output_dir, f"{base_name}.png")
         plt.savefig(output_file)
         plt.close()
     
