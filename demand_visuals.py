@@ -121,6 +121,7 @@ class DemandTracker():
 seeds = known_seeds('test')
 for seed in seeds: # type: ignore
     np.random.seed(seed)
+    print(f"Seed: {seed}")
     actual_demand = get_actual_demand(pd.read_csv('./data/demand.csv')) 
     tracker = DemandTracker('greedy_profit_v2/output_test', f'{seed}.json', actual_demand)
     tracker.run()

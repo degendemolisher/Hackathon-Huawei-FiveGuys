@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 from scipy.stats import truncweibull_min
+import matplotlib.pyplot as plt
 
 
 # CREATE LOGGER
@@ -342,6 +343,47 @@ def update_check_lifespan(fleet):
     fleet = fleet.drop(fleet.index[fleet['lifespan'] > fleet['life_expectancy']], inplace=False)
     return fleet
 
+def visualize_evaluation(df, seed=None):
+    fig, axs = plt.subplots(4, 1, figsize=(10, 16))
+
+    # Plot 'O' against 'time-step'
+    axs[0].plot(df['time-step'], df['O'], marker='o')
+    axs[0].set_title('O vs Time-step')
+    axs[0].set_xlabel('Time-step')
+    axs[0].set_ylabel('O')
+    axs[0].set_ylim(-1e8, 15e8)
+    axs[0].grid(True)
+    axs[0].axhline(0, color='black', linewidth=0.5)
+
+    # Plot 'U' against 'time-step'
+    axs[1].plot(df['time-step'], df['U'], marker='o')
+    axs[1].set_title('U vs Time-step')
+    axs[1].set_xlabel('Time-step')
+    axs[1].set_ylabel('U')
+    axs[1].set_ylim(0, 1)
+    axs[1].grid(True)
+    axs[1].axhline(0, color='black', linewidth=0.5)
+
+    # Plot 'L' against 'time-step'
+    axs[2].plot(df['time-step'], df['L'], marker='o')
+    axs[2].set_title('L vs Time-step')
+    axs[2].set_xlabel('Time-step')
+    axs[2].set_ylabel('L')
+    axs[2].set_ylim(0, 1)
+    axs[2].grid(True)
+    axs[2].axhline(0, color='black', linewidth=0.5)
+
+    # Plot 'P' against 'time-step'
+    axs[3].plot(df['time-step'], df['P'], marker='o')
+    axs[3].set_title('P vs Time-step')
+    axs[3].set_xlabel('Time-step')
+    axs[3].set_ylabel('P')
+    axs[3].set_ylim(-1e7, 10e7)
+    axs[3].grid(True)
+    axs[3].axhline(0, color='black', linewidth=0.5)
+
+    plt.tight_layout()
+    plt.savefig(f'evaluation_{seed}.png')
 
 def get_evaluation(solution, 
                    demand,
@@ -349,7 +391,8 @@ def get_evaluation(solution,
                    servers,
                    selling_prices,
                    time_steps=get_known('time_steps'), 
-                   verbose=1):
+                   verbose=1,
+                   seed=None):
 
     # SOLUTION EVALUATION
     
@@ -365,6 +408,7 @@ def get_evaluation(solution,
     demand = get_actual_demand(demand)
     OBJECTIVE = 0
     FLEET = pd.DataFrame()
+    results = []
     # if ts-related fleet is empty then current fleet is ts-fleet
     for ts in range(1, time_steps+1):
 
@@ -420,7 +464,10 @@ def get_evaluation(solution,
                       'P': np.nan}
 
         if verbose:
-            print(output)
+            results.append(output)
+    if verbose:
+        visualization = pd.DataFrame(results)
+        visualize_evaluation(visualization, seed)        
             
     return OBJECTIVE
 
@@ -476,7 +523,8 @@ def evaluation_function(solution,
                               servers,
                               selling_prices,
                               time_steps=time_steps, 
-                              verbose=verbose)
+                              verbose=verbose,
+                              seed=seed)
     # CATCH EXCEPTIONS
     except Exception as e:
         logger.error(e)

@@ -23,7 +23,7 @@ demand, datacenters, servers, selling_prices = load_problem_data()
 solution_scores = []
 for seed in tqdm(known_seeds('test')):
     # LOAD SOLUTION
-    solution = load_solution(f'output_test/{seed}.json')
+    solution = load_solution(f'greedy_profit_v2/output_test/{seed}.json')
     # solution = load_solution('../data/solution_example.json')
 
     # EVALUATE THE SOLUTION
@@ -33,7 +33,7 @@ for seed in tqdm(known_seeds('test')):
                                 servers,
                                 selling_prices,
                                 seed=seed,
-                                verbose=False)
+                                verbose=True)
     
     solution_scores.append(score)
     print(f'Solution score for {seed}: {score}')

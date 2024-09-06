@@ -85,7 +85,7 @@ class DatacenterSlotTracker():
         self.plot_results()
 
 if __name__ == '__main__':
-    soluton_dir = 'output/output_gp_dc4_test/'
+    soluton_dir = 'greedy_profit_v2/output_test'
     json_files = glob.glob(os.path.join(soluton_dir, '*.json'))
     for json_file in json_files:
         tracker = DatacenterSlotTracker(soluton_dir, os.path.basename(json_file))
