@@ -1,3 +1,10 @@
+"""
+greedy_util.py
+
+Author: Artem Vakhutinskiy, 2024
+Description: A simple algorithm that aims to maximise server utilisation
+"""
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -601,6 +608,7 @@ def _mean_future_demand_srvs(demand_srvs, ts, window_future):
 
     return mean_future_srvs
 
+
 def _calculate_volatility(demand_df, window=5):
     # Ensure time_step is included and set as index
     demand_df = demand_df.set_index(['time_step', 'server_generation'])
@@ -616,6 +624,7 @@ def _calculate_volatility(demand_df, window=5):
     
     return volatility.reset_index()
 
+
 def _get_volatility_thresholds(volatility_data, low_percentile=33, high_percentile=67):
     # Remove NaN values
     clean_data = volatility_data.dropna()
@@ -623,6 +632,7 @@ def _get_volatility_thresholds(volatility_data, low_percentile=33, high_percenti
     low_threshold = np.percentile(clean_data, low_percentile)
     high_threshold = np.percentile(clean_data, high_percentile)
     return {'low': low_threshold, 'high': high_threshold}
+
 
 def _get_window_size(volatility, thresholds):
     if volatility < thresholds['low']:

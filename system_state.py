@@ -1,3 +1,9 @@
+"""
+system_state.py
+
+Author: Artem Vakhutinskiy, 2024
+Description: A simple state representation class with necessary update functions
+"""
 import pandas as pd
 
 from evaluation import *

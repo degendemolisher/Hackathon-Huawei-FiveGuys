@@ -1,8 +1,0 @@
-server_generation,high,medium,low
-CPU.S1,0,0,0
-CPU.S2,-5,4,0
-CPU.S3,0,0,0
-CPU.S4,0,0,0
-GPU.S1,0,0,0
-GPU.S2,0,0,0
-GPU.S3,6,0,-3
