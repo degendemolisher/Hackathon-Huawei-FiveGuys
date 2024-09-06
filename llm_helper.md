@@ -66,7 +66,6 @@ Where
 
 ### Demand (Eq. 2.1)
 
-
 At every time-step, there is a certain demand for each pair of latency sensitivity $i$ and server generation $g$. Such demand is computed by the “get_actual_demand” function provided in the “evaluation.py” file.
 
 $$
@@ -146,4 +145,3 @@ Solutions are evaluated according to the cumulative score achieved through Eq. 6
 $$
 O = \sum_{t = 1}^{T} U_t \times L_t \times P_t
 $$
-
