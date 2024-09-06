@@ -1,7 +1,6 @@
-if __name__ == '__main__':
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import numpy as np
 import pandas as pd
@@ -26,20 +25,29 @@ TODO: See idea.md for the steps
 
 """
 
-seeds = known_seeds('test')
+def get_solution(quantile, range_multiplier):
+    
+    seeds = known_seeds('test')
 
-demand = pd.read_csv('./data/demand.csv')
-for seed in seeds:
-    print('----------------------------')
-    print(f'Seed: {seed}')
-    # SET THE RANDOM SEED
-    np.random.seed(seed)
+    demand = pd.read_csv('./data/demand.csv')
+    for seed in seeds:
+        print('----------------------------')
+        print(f'Seed: {seed}')
+        # SET THE RANDOM SEED
+        np.random.seed(seed)
 
-    # GET THE DEMAND
-    actual_demand = get_actual_demand(demand)
+        # GET THE DEMAND
+        actual_demand = get_actual_demand(demand)
 
-    # CALL YOUR APPROACH HERE
-    results = greedy_profit_algorithm(actual_demand)
+        # CALL YOUR APPROACH HERE
+        results = greedy_profit_algorithm(actual_demand, quantile/100, range_multiplier)
 
-    # SAVE YOUR SOLUTION
-    save_results_as_actions(f'{seed}.json', results)
+        # Extract the directory path from the file path
+        file_path = f'greedy_profit_v2/output_test/{quantile}%_merge_*{range_multiplier}/{seed}.json'
+        directory = os.path.dirname(file_path)
+
+        # Create the directory if it doesn't exist
+        os.makedirs(directory, exist_ok=True)
+
+        # Save the results as actions
+        save_results_as_actions(file_path, results)

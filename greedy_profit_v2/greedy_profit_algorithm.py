@@ -6,7 +6,7 @@ from greedy_profit_v2.demand_ranges import get_demand_ranges, merge_close_ranges
 from greedy_profit_v2.remaining_slot_decrement_algorithm import remaining_slots_decrement_algorithm
 
 
-def greedy_profit_algorithm(actual_demand: pd.DataFrame):
+def greedy_profit_algorithm(actual_demand: pd.DataFrame, quantile: float, merge_threshold_multiplier: float = 4):
     results = []
 
     # 1) Initialise a DataFrame that tracks the remaining slots of each datacentre at each time step
@@ -26,7 +26,7 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
             ranges = get_demand_ranges(relevant_demand)
 
             # 2) Merge ranges which have a negligibly small gap in between (relative to the length of the smallest range)
-            ranges = merge_close_ranges(ranges)
+            ranges = merge_close_ranges(ranges, merge_threshold_multiplier)
 
             # 3) Filter all ranges which last for less than the time it takes for the server/latency to break even
             break_even_time = break_even_time_all[server_generation][latency_sensitivity]
@@ -42,7 +42,7 @@ def greedy_profit_algorithm(actual_demand: pd.DataFrame):
 
                 # 1) Calculate the minimum demand across that range
                 demand_in_range = relevant_demand.query(f'time_step >= @current_range[0] and time_step <= @current_range[1]')
-                min_demand = demand_in_range[latency_sensitivity].quantile(0.375)
+                min_demand = demand_in_range[latency_sensitivity].quantile(quantile)
 
 
                 # 2) Calculate the number of servers to buy meet the minimum demand

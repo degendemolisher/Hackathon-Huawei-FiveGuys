@@ -24,7 +24,7 @@ def get_demand_ranges(relevant_demand: pd.DataFrame):
 
     return ranges
 
-def merge_close_ranges(ranges: list[tuple[int, int]]):
+def merge_close_ranges(ranges: list[tuple[int, int]], merge_threshold_multiplier: float):
     """
     Implements step 2: Merge ranges which have a negligibly small gap in between (relative to the length of the smallest range)
 
@@ -39,7 +39,8 @@ def merge_close_ranges(ranges: list[tuple[int, int]]):
         length_next = ranges[i + 1][1] - ranges[i + 1][0]
 
         # ADJUSTABLE
-        merge_threshold = min(length, length_next) * 4
+        merge_threshold = min(length, length_next) * merge_threshold_multiplier
+        # merge_threshold = 10
 
         if ranges[i + 1][0] - ranges[i][1] < merge_threshold:
             ranges[i] = (ranges[i][0], ranges[i + 1][1])
