@@ -162,15 +162,11 @@ cython_debug/
 #.idea/
 
 logs/
+log/
 *.log
 
 # evaluation output
 output/
 output_training/
 output_test/
-
-# rl_agent branch
-/rl_solver
-mysolutionomer.py
-mysolutionomer.ipynb
-visuals/
+visual_output/

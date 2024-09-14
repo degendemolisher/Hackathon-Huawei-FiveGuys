@@ -1,5 +1,3 @@
-
-
 def known_seeds(mode):
     if mode == 'training':
         return [1741, 
