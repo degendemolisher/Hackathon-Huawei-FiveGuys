@@ -1,0 +1,43 @@
+{
+    "3329": {
+        "quantile": "40%",
+        "range_multiplier": "1"
+    },
+    "4201": {
+        "quantile": "33%",
+        "range_multiplier": "8"
+    },
+    "8761": {
+        "quantile": "35%",
+        "range_multiplier": "8"
+    },
+    "2311": {
+        "quantile": "37.5%",
+        "range_multiplier": "0.8"
+    },
+    "2663": {
+        "quantile": "37.5%",
+        "range_multiplier": "0.5"
+    },
+    "4507": {
+        "quantile": "40%",
+        "range_multiplier": "2"
+    },
+    "6247": {
+        "quantile": "60%",
+        "range_multiplier": "2"
+    },
+    "2281": {
+        "quantile": "0%",
+        "range_multiplier": "10"
+    },
+    "4363": {
+        "quantile": "37.5%",
+        "range_multiplier": "1"
+    },
+    "5693": {
+        "quantile": "37.5%",
+        "range_multiplier": "3"
+    },
+    "mean_score": 908876432.0340948
+}

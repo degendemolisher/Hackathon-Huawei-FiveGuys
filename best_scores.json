@@ -1,0 +1,43 @@
+{
+    "3329": {
+        "best_score": 857458387.3662574,
+        "best_configuration": "40%_merge_*1"
+    },
+    "4201": {
+        "best_score": 1045366377.7975498,
+        "best_configuration": "33%_merge_*8"
+    },
+    "8761": {
+        "best_score": 974793126.6776997,
+        "best_configuration": "35%_merge_*8_865.8M"
+    },
+    "2311": {
+        "best_score": 765323873.0347309,
+        "best_configuration": "37.5%_merge_*0.8"
+    },
+    "2663": {
+        "best_score": 868594298.5032556,
+        "best_configuration": "37.5%_merge_*0.5"
+    },
+    "4507": {
+        "best_score": 985939915.7976024,
+        "best_configuration": "40%_merge_*2_882.1M"
+    },
+    "6247": {
+        "best_score": 961193379.2288245,
+        "best_configuration": "60%_merge_*2_851.9M"
+    },
+    "2281": {
+        "best_score": 834710935.4210266,
+        "best_configuration": "0%_merge_10_860.3M"
+    },
+    "4363": {
+        "best_score": 895033016.0267056,
+        "best_configuration": "37.5%_merge_*1"
+    },
+    "5693": {
+        "best_score": 900351010.4872948,
+        "best_configuration": "37.5%_merge_*3"
+    },
+    "mean_score": 908876432.0340948
+}

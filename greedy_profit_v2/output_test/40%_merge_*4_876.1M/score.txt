@@ -1,0 +1,10 @@
+Solution score for 3329: 807833708.274413
+Solution score for 4201: 1030960517.749209
+Solution score for 8761: 927805006.0178709
+Solution score for 2311: 744471862.2547177
+Solution score for 2663: 819903797.3972805
+Solution score for 4507: 971302554.4503467
+Solution score for 6247: 939941450.4997914
+Solution score for 2281: 826666478.208205
+Solution score for 4363: 841946477.2632426
+Solution score for 5693: 850346631.2967701
