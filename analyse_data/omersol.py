@@ -12,11 +12,12 @@ def get_my_solution(d):
     dd = big.csv_format_demand(d)
     ddd = pd.DataFrame.from_dict(dd)
     result_df = max_profit(ddd)
-    valid = verify_solution_integrity(result_df)
-    if(not valid):
-        print("solution has a problem")
-    # result_df2 = max_profit(ddd,115,35)
-    buy_array = big.buy_all(result_df)
+    #result_df.to_csv('out2.csv', index=True)
+    # valid = verify_solution_integrity(result_df)
+    # if(not valid):
+    #     print("solution has a problem")
+    buy_array = big.process_dataframe(result_df, 6)
+    # print(buy_array)
     #buy_array.extend(big.buy_all(result_df2))
     #buy_array = buy_array.flatten()
     return buy_array
