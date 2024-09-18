@@ -131,6 +131,8 @@ for i in range(7):
 
 def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
     chunks = int(TIMESTEPS/step_size)
+    x = np.reshape(x,(chunks, 4, 7))
+    y = np.reshape(y,(TIMESTEPS,3,7))
     #x = shape(TIMESTEPS,DATACENTER,SERVERGEN)
     revenues = []
     costs = []
@@ -214,29 +216,11 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
         #skip dc4 as calc for dc3 already includes the info for dc4
         if(datacenter != 3):
             for timestep in range(TIMESTEPS):
-                chunk = int(timestep/step_size)
-                step = timestep%step_size
-                total_ts_x = []
-                if(datacenter==2):
-                    for servergen in range(7):
-                        # get x*cap*sell_price for each servergen and each server
-                        x_times_cap_times_selling_price = x_minus_z_arr[timestep][datacenter][servergen]*capacity[servergen] * dc_selling_prices[servergen]
-                        x_times_cap_times_selling_price_dc4 = x_minus_z_arr[timestep][datacenter+1][servergen]*capacity[servergen] * dc_selling_prices[servergen]
-                        x_times_cap_times_selling_price += x_times_cap_times_selling_price_dc4
-                        total_ts_x.append(x_times_cap_times_selling_price)
-                else:
-                    for servergen in range(7):
-                        # get x*cap*sell_price for each servergen and each server
-                        x_times_cap_times_selling_price = x_minus_z_arr[timestep][datacenter][servergen]*capacity[servergen] * dc_selling_prices[servergen]
-                        total_ts_x.append(x_times_cap_times_selling_price)
-                total_ts_x = np.array(total_ts_x)
-                if(timestep<96):
-                    for i in range(min(chunk+1,max_servers)):
-                        total_ts_x[:,i] = total_ts_x[:,i] * mult_array[timestep-i*step_size]
-                else:
-                    for i in range(max_servers):
-                        total_ts_x[:,i] = total_ts_x[:,i] * mult_array[(95-step_size+step)-i*step_size]
-                revenue = np.sum(total_ts_x)
+                supply = y[timestep, datacenter]
+                revenue = []
+                for j in range(7):
+                    revenue.append(supply[j]*dc_selling_prices[j])
+                revenue = np.sum(revenue)
                 dc_revenues.append(revenue)
             revenues.append(dc_revenues)
         #calc energycost for all servergens at the datacenter
@@ -257,13 +241,13 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
                 #get cost of new servers
                 new_cost = ts_servers[:, new_servers]*(purchase_prices+energy_costs+maintenance_cost_array[0])
                 #factor in lifespan
-                new_cost *=  1/96
+                # new_cost *=  1/96
                 new_cost = np.sum(new_cost)
 
                 #calc energy + maintenance cost
                 energy_and_maint = maintenance_cost_array + energy_costs
                 #factor in lifespan into energy_and_maint cost
-                energy_and_maint = energy_and_maint * mult_array
+                # energy_and_maint = energy_and_maint * mult_array
                 maintained_servers = ts_servers[:, :new_servers]
                 maint_cost = []
 
@@ -272,7 +256,6 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
                         # print(ts_servers.shape)
                         # print(i)
                         maint_cost.append(maintained_servers[:,i] * energy_and_maint[timestep-i*step_size])
-                        total_ts_x[:,i] = total_ts_x[:,i] * mult_array[timestep-i*step_size]
                 else:
                     for i in range(max_servers-1):
                         maint_cost.append(maintained_servers[:,i] * energy_and_maint[(95-step_size+step)-i*step_size])
@@ -288,13 +271,12 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
                 maintained_servers = ts_servers
                 #calc energy + maintenance cost
                 energy_and_maint = maintenance_cost_array + energy_costs
-                energy_and_maint = energy_and_maint * mult_array
+                # energy_and_maint = energy_and_maint * mult_array
                 maint_cost = []
 
                 if(timestep<96):
                     for i in range(min(chunk+1,max_servers)):
                         maint_cost.append(maintained_servers[:,i] * energy_and_maint[timestep-i*step_size])
-                        total_ts_x[:,i] = total_ts_x[:,i] * mult_array[timestep-i*step_size]
                 else:
                     for i in range(max_servers):
                         maint_cost.append(maintained_servers[:,i] * energy_and_maint[(95-step_size+step)-i*step_size])
@@ -308,25 +290,17 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
 
     #after all of the profits and costs have been calculated for all the datacenters at each timestep,
     #get sum of costs for the datacenters and the sum of profits for all datacenters at each timestep
-    # print(costs[0][48])
     costs_sum = np.sum(costs, axis=0)
-    # print("costs: ",costs_sum[97])
-    # print()
     revenue_sum = np.sum(revenues, axis=0)
-    # print("revenue: ",revenue_sum[97])
-
-    profit_arr = []
-    #get profit at each timestep
-    for i in range(TIMESTEPS):
-        profit_arr.append(revenue_sum[i]-costs_sum[i])
-    return profit_arr
+    return revenue_sum, costs_sum
 
 def objective_func(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
-    chunk = int(TIMESTEPS/step_size)
-    x = np.reshape(x,(chunk, 4, 7))
-    y = np.reshape(y,(TIMESTEPS,4,7))
-    P = profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP)
-    Objective = np.sum(P)
+    revenues, costs = profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP)
+    #get profit at each timestep
+    profit_arr = []
+    for i in range(TIMESTEPS):
+        profit_arr.append(revenues[i]-costs[i])
+    Objective = np.sum(profit_arr)
     return Objective
 
 # %%
@@ -356,7 +330,7 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     z_arr = []
     #array that represents y=min(x*cap,demand) at each timestep
     y = []
-    #boolean variable that each bind to a x val, used to add if then links later
+    #boolean variable that each bind to a x val, used to add if then links later NEEDS SIMILAR GOOFY SHAPE AS Z
     b = []
     c = 0
     #makes an array of size (chunks * dc_num * servergen_num)
@@ -367,19 +341,19 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
             #generate cpu servers
             for j in range(4):
                 x.append(solver.NewIntVar(0, int(dc_cap[k]/2), f'x{c}'))
-                b.append(solver.NewBoolVar("b{c}"))
+                # b.append(solver.NewBoolVar(f"b{c}"))
                 a+=1
                 c+=1
             #generate gpu servers
             for j in range(3):
                 x.append(solver.NewIntVar(0, int(dc_cap[k]/4), f'x{c}'))
-                b.append(solver.NewBoolVar("b{c}"))
+                # b.append(solver.NewBoolVar(f"b{c}"))
                 a+=1
                 c+=1
     
     c=0
     for i in range(TIMESTEPS2):
-        for k in range(4):
+        for k in range(3):
             a=0
             #generate cpu servers
             for j in range(4):
@@ -442,28 +416,13 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
 
     # print("Number of variables =", solver.NumVariables())
 
-    # Constraints
-    #adds constraint for retail time
-    for dc in range(4):
-        action_time_array = np.arange(1,TIMESTEPS2+1,step_size)
-        start_pos = dc*7
-        for servergen in range(7):
-            rt = eval(release_times[servergen])
-            counter = servergen
-            for j in action_time_array:
-                if(j < rt[0] or j > rt[1]):
-                    solver.Add(x[start_pos+counter] == 0)
-                counter+=28
-
-    mult_array = np.empty(((96),7))
-    counter=0
-    for i in range(1,96+1):
-        mult_array[counter].fill(i/96)
-        counter+=1
-
     #for each datacenter
     re_z = {}
     re_z1 = []
+    re_z2 = []
+    x_chunks_num = int(168/step_size)
+    #put in values for ts 0 (all zeros)
+    re_z2.append(np.zeros((x_chunks_num,4,7)))
     for i in z.keys():
         l = len(z[i])
         #datacenter_number*server_gen_number = 28
@@ -480,9 +439,44 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
             temmp = np.reshape(temmp,(l+future_filler,4,7))
         re_z[i] = temmp
         re_z1.append(temmp)
+        re_z2.append(temmp)
     re_z1 = np.array(re_z1)
+    re_z2 = np.array(re_z2)
     re_z1_cumsum = np.cumsum(re_z1, axis=0)
-    # print(re_z1_cumsum[0][0][0][0])
+    re_z2_cumsum = np.cumsum(re_z2, axis=0)
+
+    #get x-z at each timestep for every server that exists at that timestep
+    max_in_existance = int(96/step_size)
+    x_minus_z_arr = np.zeros((168, 4, 7, max_in_existance), dtype=object)
+    # x_minus_z_arr = []
+    discard_chunks = int(TIMESTEPS2/dismiss_steps)
+    for chunk in range(chunks):
+        for datacenter in range(4):
+            for servergen in range(7):
+                ts_x = temp_x[chunk][datacenter][servergen]
+                start_timestep = chunk*step_size
+                for timestep in range(start_timestep,min(96+start_timestep,168)):
+                    disc_chunk = max(min(int(timestep/24),6),0)
+                    curr_chunk = int(timestep/step_size)
+                    # if(chunk>=int(144/step_size)):
+                    #     adder = int((timestep-(96-step_size))/step_size)
+                    #     x_minus_z_arr[timestep][datacenter][servergen][chunk-adder] = ts_x
+                    #     continue
+                    discard = re_z2_cumsum[disc_chunk][chunk][datacenter][servergen]
+                    if(timestep>=96):
+                        adder = int((timestep-(96-step_size))/step_size)
+                        x_minus_z_arr[timestep][datacenter][servergen][chunk-adder] = ts_x - discard
+                    else:
+                        x_minus_z_arr[timestep][datacenter][servergen][chunk] = ts_x - discard
+    
+    #init the b binding variables
+    for chunk in range(chunks):
+        curr_max = min(max_in_existance, chunk+1)
+        for datacenter in range(4):
+            for servergen in range(7):
+                for server in range(curr_max):
+                    b.append(solver.NewBoolVar(f"b{c}"))
+
 
     #below code gives an array of the cumsum with lifespan at each timestep for each server factored in
     cumsum_w_lifespan = np.reshape(np.array(x), (chunks, 28))
@@ -503,7 +497,7 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
             if(timestep >= 96):
                 temp = dc_array[dc][modded_ts:curr_chunk+1]#*(mult_array[step::step_size][::-1])
             else:
-                mult_array[step-1:timestep+step_size-1:step_size]
+                # mult_array[step-1:timestep+step_size-1:step_size]
                 temp = dc_array[dc][:curr_chunk+1]#*(mult_array[step:timestep+step_size:step_size][::-1])
             temp = np.sum(temp, axis=0)
             giga.append(temp)
@@ -515,6 +509,25 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     # print(cumsum_z[2][0])
     # print("ls",ls_cumsum[0][100][0])
 
+    # Constraints
+    #adds constraint for retail time
+    for dc in range(4):
+        action_time_array = np.arange(1,TIMESTEPS2+1,step_size)
+        start_pos = dc*7
+        for servergen in range(7):
+            rt = eval(release_times[servergen])
+            counter = servergen
+            for j in action_time_array:
+                if(j < rt[0] or j > rt[1]):
+                    solver.Add(x[start_pos+counter] == 0)
+                counter+=28
+
+    # mult_array = np.empty(((96),7))
+    # counter=0
+    # for i in range(1,96+1):
+    #     mult_array[counter].fill(i/96)
+    #     counter+=1
+
     for timestep in range(TIMESTEPS2):
         disc_chunk = min(int(timestep/24)-1,5)
         no_expired = max(int((timestep-(96-step_size))/step_size),0)
@@ -523,21 +536,10 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
         if(timestep%step_size==0):
             for datacenter in range(4):
                 #datacenter cap constraint
-                if(timestep<24):
-                    cpu = ls_cumsum[datacenter][timestep][:4]*2
-                    gpu = ls_cumsum[datacenter][timestep][4:]*4
-                    solver.Add(np.sum(cpu)+np.sum(gpu) <= dc_cap[datacenter])
-                    solver.Add(np.sum(cpu)+np.sum(gpu) >= 0)
-                else:
-                    discards = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,datacenter],axis=0)
-                    cumsum_x_m_z = ls_cumsum[datacenter][timestep]-discards
-                    cpu_cap_used = cumsum_x_m_z[:4]*2
-                    gpu_cap_used = cumsum_x_m_z[4:]*4
-                    # if(timestep == 108):
-                    #     print(np.sum(cumsum_x_m_z))
-                    #     print()
-                    solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) <= dc_cap[datacenter])
-                    solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) >= 0)
+                cpu = x_minus_z_arr[timestep][datacenter][:4]*2
+                gpu = x_minus_z_arr[timestep][datacenter][4:]*4
+                solver.Add(np.sum(cpu)+np.sum(gpu) <= dc_cap[datacenter])
+                solver.Add(np.sum(cpu)+np.sum(gpu) >= 0)
 
 
     #to ensure 1:1 mapping we must also add the restiction of: x - all z affecting that timestep >=0
@@ -555,95 +557,88 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
             disc_chunk = min(int(timestep/24)-1,5)
             no_expired = max(int((timestep-(96-step_size))/step_size),0)
             chunk = int(timestep/step_size)
-            modder = int(96/step_size)
-            # if(timestep>=24):
-            #     if(datacenter != 3):
-            #         discards_dc4 = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,3],axis=0)
-            #         for servergen in range(7):
-            #             index = timestep*21+datacenter*7+servergen
-            #             if(datacenter == 2):
-            #                 #demand met constraint
-            #                 x_minus_z_dc3 = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-            #                 x_minus_z_dc4 = ls_cumsum[datacenter+1][timestep][servergen]-discards_dc4[servergen]
-            #                 solver.Add(y[index] <= x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen])
-            #                 solver.Add(y[index] <= sens_demand[timestep][servergen])
-            #             else:
-            #                 #demand met constraint
-            #                 x_minus_z = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-            #                 #dc(xa-za)*cap<=demand
-            #                 solver.Add(y[index] <= x_minus_z*capacity[servergen])
-            #                 solver.Add(y[index] <= sens_demand[timestep][servergen])
-            # else:
-            #     if(datacenter != 3):
-            #         for servergen in range(7):
-            #             index = timestep*21+datacenter*7+servergen
-            #             if(datacenter == 2):
-            #                 #demand met constraint
-            #                 x_dc3 = ls_cumsum[datacenter][timestep][servergen]
-            #                 x_dc4 = ls_cumsum[datacenter+1][timestep][servergen]
-            #                 solver.Add(y[index] <= x_dc3*capacity[servergen]+x_dc4*capacity[servergen])
-            #                 solver.Add(y[index] <= sens_demand[timestep][servergen])
-            #             else:
-            #                 #demand met constraint
-            #                 solver.Add(y[index] <= ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] )
-            #                 solver.Add(y[index] <= sens_demand[timestep][servergen])
-
-
-            if(timestep%step_size==0):
-                if(timestep>=24):
-                    #datacenter cap constraint
+            if(timestep>=24):
+                if(datacenter != 3):
+                    discards_dc4 = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,3],axis=0)
                     discards = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,datacenter],axis=0)
-                    x_minus_z = ls_cumsum[datacenter][timestep]-discards
-                    cpu_cap_used = x_minus_z[:4]*2
-                    gpu_cap_used = x_minus_z[4:]*4
-                    solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) <= dc_cap[datacenter])
-                    solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) >= 0)
-                    if(datacenter != 3):
-                        discards_dc4 = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,3],axis=0)
-                        for servergen in range(7):
-                            index = timestep*21+datacenter*7+servergen
-                            if(datacenter == 2):
-                                #demand met constraint
-                                x_minus_z_dc3 = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-                                x_minus_z_dc4 = ls_cumsum[datacenter+1][timestep][servergen]-discards_dc4[servergen]
-                                solver.Add(x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen] 
-                                <= sd_max[chunk][servergen])
-                                solver.Add(x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen] 
-                                >= 0)
-                            else:
-                                #demand met constraint
-                                x_minus_z = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-                                #dc(xa-za)*cap<=demand
-                                solver.Add(x_minus_z*capacity[servergen] <= sd_max[chunk][servergen])
-                                solver.Add(x_minus_z*capacity[servergen] >= 0)
-                else:
-                    #datacenter cap constraint
-                    # cpu_cap_used = ls_cumsum[datacenter][timestep][:4]*2
-                    # gpu_cap_used = ls_cumsum[datacenter][timestep][4:]*4
-                    # # print(np.sum(ls_cumsum[datacenter][timestep]))
-                    # solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) <= dc_cap[datacenter])
-                    # solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) >= 0)
-                    if(datacenter != 3):
-                        for servergen in range(7):
-                            index = timestep*21+datacenter*7+servergen
-                            if(datacenter == 2):
-                                #demand met constraint
-                                x_dc3 = ls_cumsum[datacenter][timestep][servergen]
-                                x_dc4 = ls_cumsum[datacenter+1][timestep][servergen]
-                                solver.Add(x_dc3*capacity[servergen]+x_dc4*capacity[servergen] 
-                                <= sd_max[chunk][servergen])
-                                solver.Add(x_dc3*capacity[servergen]+x_dc4*capacity[servergen] 
-                                >= 0)
-                            else:
-                                #demand met constraint
-                                solver.Add(ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] 
-                                <= sd_max[chunk][servergen])
-                                solver.Add(ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] 
-                                >= 0)
+                    for servergen in range(7):
+                        index = timestep*21+datacenter*7+servergen
+                        if(datacenter == 2):
+                            #demand met constraint
+                            x_minus_z_dc3 = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
+                            x_minus_z_dc4 = ls_cumsum[datacenter+1][timestep][servergen]-discards_dc4[servergen]
+                            solver.Add(y[index] <= x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen])
+                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                        else:
+                            #demand met constraint
+                            x_minus_z = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
+                            #dc(xa-za)*cap<=demand
+                            solver.Add(y[index] <= x_minus_z*capacity[servergen])
+                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+            else:
+                if(datacenter != 3):
+                    for servergen in range(7):
+                        index = timestep*21+datacenter*7+servergen
+                        if(datacenter == 2):
+                            #demand met constraint
+                            x_dc3 = ls_cumsum[datacenter][timestep][servergen]
+                            x_dc4 = ls_cumsum[datacenter+1][timestep][servergen]
+                            solver.Add(y[index] <= x_dc3*capacity[servergen]+x_dc4*capacity[servergen])
+                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                        else:
+                            #demand met constraint
+                            solver.Add(y[index] <= ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] )
+                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+
+
+            # if(timestep%step_size==0):
+            #     if(timestep>=24):
+            #         #datacenter cap constraint
+            #         discards = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,datacenter],axis=0)
+            #         x_minus_z = ls_cumsum[datacenter][timestep]-discards
+            #         cpu_cap_used = x_minus_z[:4]*2
+            #         gpu_cap_used = x_minus_z[4:]*4
+            #         solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) <= dc_cap[datacenter])
+            #         solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) >= 0)
+            #     else:
+            #         #datacenter cap constraint
+            #         cpu_cap_used = ls_cumsum[datacenter][timestep][:4]*2
+            #         gpu_cap_used = ls_cumsum[datacenter][timestep][4:]*4
+            #         # print(np.sum(ls_cumsum[datacenter][timestep]))
+            #         solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) <= dc_cap[datacenter])
+            #         solver.Add(np.sum(cpu_cap_used)+np.sum(gpu_cap_used) >= 0)
                 for servergen in range(7):
                     x_minus_z_1to1 = temp_x[chunk][datacenter][servergen] - re_z1_cumsum[5][chunk][datacenter][servergen]
                     # print(x_minus_z_1to1)
                     solver.Add(x_minus_z_1to1 >= 0)
+            curr_max = min(max_in_existance, chunk+1)
+            for servergen in range(7):
+                for server in range(curr_max):
+                    s = x_minus_z_arr[timestep][datacenter][servergen][server]
+                    solver.Add(s >= 0)
+
+    
+    # prev_indexes = 0
+    # for chunk in range(chunks):
+    #     curr_max = min(max_in_existance, chunk+1)
+    #     # rough = np.arange(1,curr_max)*rough
+    #     for datacenter in range(4):
+    #         for servergen in range(7):
+    #             for server in range(curr_max):
+    #                 index = prev_indexes + datacenter*7*curr_max + servergen*curr_max+server
+    #                 # print(index)
+    #                 s = x_minus_z_arr[chunk][datacenter][servergen][server]
+    #                 solver.Add(s > 0).only_enforce_if(b[index])
+    #                 solver.Add(s == 0).only_enforce_if(~b[index])
+    #     prev_indexes += datacenter*7*curr_max + servergen*curr_max+server
+    
+    # profit_arr, cost_arr = profit(demand2, x, z, y, ls_cumsum, step_size, TIMESTEPS2, START_STEP)
+    # for timestep in range(TIMESTEPS2):
+    #     curr_chunk = int(timestep/step_size)
+    #     for datacenter in range(4):
+    #         for servergen in range(7):
+
+
 
     #print("Number of constraints =", solver.NumConstraints())
 
@@ -669,9 +664,9 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     return result_df
 
 # %%
-result_df = max_profit(pd.read_csv("../data/demand.csv"))
-print(result_df)
-result_df.to_csv('out2.csv', index=True)
+# result_df = max_profit(pd.read_csv("../data/demand.csv"))
+# print(result_df)
+# result_df.to_csv('out2.csv', index=True)
 # valid = verify_solution_integrity(result_df, True)
 # if(not valid):
 #     print("solution has an error!")
