@@ -11,16 +11,17 @@ from tqdm import tqdm
 
 from typing import List, Dict, Set, Tuple
 import uuid
-import sys
 
 # setting path
-sys.path.append('..')
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils import load_problem_data
 from evaluation import get_actual_demand, get_known
 from system_state import SystemState
 
-DEMAND, DATACENTERS, SERVERS, SELLING_PRICES = load_problem_data('../data')
+DEMAND, DATACENTERS, SERVERS, SELLING_PRICES = load_problem_data('data')
 
 TEST_SEED = 1741
 WINDOW_SIZE = 2
@@ -161,7 +162,7 @@ def calculate_demand_def_exc(srvs_count: pd.DataFrame, demand: pd.DataFrame) -> 
     return result
 
 
-def check_fleet_for_old_servers(state: SystemState) -> Tuple[List, pd.DataFrame, Set]:
+def check_fleet_for_old_servers(state: SystemState) -> Tuple[List, Set]:
     """
     Check the current fleet for servers that are about to reach their life expectancy 
         and prepare actions to dismiss them.
@@ -171,11 +172,12 @@ def check_fleet_for_old_servers(state: SystemState) -> Tuple[List, pd.DataFrame,
                              containing information about the server fleet.
 
     Returns:
-        list: A list of dismissal actions. Each action is a dictionary with the following keys:
+        List: A list of dismissal actions. Each action is a dictionary with the following keys:
             - 'datacenter_id' (str): The ID of the datacenter where the server is located.
             - 'server_generation' (str): The generation of the server.
             - 'server_id' (str): The unique identifier of the server.
             - 'action' (str): Always set to 'dismiss' for this function.
+        Set: A set of processed servers
         
         Returns an empty list if there are no servers that meet the dismissal criteria.
         set: A set of processed servers
@@ -707,7 +709,7 @@ def main():
     solution = get_solution(actual_demand, window_size=WINDOW_SIZE)
     
     solution_df = pd.DataFrame(solution)
-    solution_df.to_json(f'../data/solution_w{WINDOW_SIZE}.json', orient='records', indent=4)
+    solution_df.to_json(f'data/solution_test.json', orient='records', indent=4)
 
 if __name__ == "__main__":
     main()

@@ -33,8 +33,6 @@ for seed in tqdm(known_seeds('test')):
     file_path = f'./output_test/{seed}.json'
     solution = load_solution(file_path)
     
-    # solution = load_solution('../data/solution_example.json')
-
     # EVALUATE THE SOLUTION
     score = evaluation_function(solution,
                                 demand,

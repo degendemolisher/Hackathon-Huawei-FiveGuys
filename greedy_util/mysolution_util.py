@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 
-import sys
-
 # setting path
-sys.path.append('..')
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from seeds import known_seeds
 from utils import save_solution
@@ -14,7 +14,7 @@ from greedy_util import get_solution
 
 seeds = known_seeds('test')
 
-demand = pd.read_csv('../data/demand.csv')
+demand = pd.read_csv('data/demand.csv')
 for idx, seed in enumerate(seeds):
     # SET THE RANDOM SEED
     np.random.seed(seed)
