@@ -25,7 +25,50 @@ TODO: See idea.md for the steps
 
 """
 
-def get_solution(quantile, range_multiplier):
+best_config = {
+    "3329": {
+        "quantile": "40%",
+        "range_multiplier": "1"
+    },
+    "4201": {
+        "quantile": "33%",
+        "range_multiplier": "8"
+    },
+    "8761": {
+        "quantile": "35%",
+        "range_multiplier": "8"
+    },
+    "2311": {
+        "quantile": "37.5%",
+        "range_multiplier": "0.8"
+    },
+    "2663": {
+        "quantile": "37.5%",
+        "range_multiplier": "0.5"
+    },
+    "4507": {
+        "quantile": "40%",
+        "range_multiplier": "2"
+    },
+    "6247": {
+        "quantile": "60%",
+        "range_multiplier": "2"
+    },
+    "2281": {
+        "quantile": "0%",
+        "range_multiplier": "10"
+    },
+    "4363": {
+        "quantile": "37.5%",
+        "range_multiplier": "1"
+    },
+    "5693": {
+        "quantile": "37.5%",
+        "range_multiplier": "3"
+    }
+}
+
+def get_solution():
     
     seeds = known_seeds('test')
 
@@ -39,11 +82,14 @@ def get_solution(quantile, range_multiplier):
         # GET THE DEMAND
         actual_demand = get_actual_demand(demand)
 
+        quantile = best_config[str(seed)]['quantile']
+        range_multiplier = best_config[str(seed)]['range_multiplier']
+
         # CALL YOUR APPROACH HERE
-        results = greedy_profit_algorithm(actual_demand, quantile/100, range_multiplier)
+        results = greedy_profit_algorithm(actual_demand, float(quantile.strip('%'))/100, float(range_multiplier))
 
         # Extract the directory path from the file path
-        file_path = f'greedy_profit_v2/output_test/{quantile}%_merge_*{range_multiplier}/{seed}.json'
+        file_path = f'output_test/{seed}.json'
         directory = os.path.dirname(file_path)
 
         # Create the directory if it doesn't exist
@@ -51,3 +97,8 @@ def get_solution(quantile, range_multiplier):
 
         # Save the results as actions
         save_results_as_actions(file_path, results)
+
+if __name__ == '__main__':
+    get_solution()
+    print('----------------------------')
+    print('All seeds have been processed')

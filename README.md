@@ -3,7 +3,8 @@
 ## Team FiveGuys
 
 Install the packages necessary for this algorithm using
-```
+
+```bash
 pip install -r requirements.txt
 ```
 
