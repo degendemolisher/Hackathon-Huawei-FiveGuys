@@ -1,19 +1,6 @@
 
 
-def known_seeds(mode):
-    if mode == 'training':
-        return [1741, 
-                3163, 
-                6053, 
-                2237, 
-                8237, 
-                8933, 
-                4799, 
-                1061, 
-                2543, 
-                8501]
-    elif mode == 'test':
-        return []
-
+def known_seeds():
+    return [2381, 5351, 6047, 6829, 9221, 9859, 8053, 1097, 8677, 2521]
 
 
