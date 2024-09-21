@@ -25,3 +25,4 @@ PoC file: post_flattening.py
     2) Given elasticity, calculate the delta p for all time steps
     3) Calculate the new price for all time steps
     4) Convert the new prices into price change actions with time step, latency sensitivity and server generation
+4) Save the pricing strategy in the JSON
