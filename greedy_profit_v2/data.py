@@ -1,7 +1,7 @@
 import pandas as pd
 from utils import load_problem_data
 
-demand, datacenters, servers, selling_prices = load_problem_data()
+demand, datacenters, servers, selling_prices, elasticity = load_problem_data()
 
 # Taken manually from the profitability spreadsheet in the google drive
 break_even_time_all = {
