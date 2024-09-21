@@ -1,3 +1,5 @@
+
+
 import logging
 import numpy as np
 import pandas as pd
@@ -50,9 +52,14 @@ def get_known(key):
                 'cost_of_energy',
                 'latency_sensitivity', 
                 'slots_capacity']
+    elif key == 'price_strategy_columns':
+        return ['time_step',
+                'latency_sensitivity',
+                'server_generation',
+                'price']
 
 
-def solution_data_preparation(solution, servers, datacenters, selling_prices):
+def fleet_data_preparation(solution, servers, datacenters, selling_prices):
     # CHECK DATA FORMAT
     solution = check_data_format(solution)
     solution = check_actions(solution)
@@ -125,6 +132,35 @@ def drop_duplicate_server_ids(solution):
     return solution
 
 
+def pricing_data_preparation(prices):
+    # IF THERE IS NO PRICING STRATEGY DO NOTHING
+    if prices.empty:
+        return prices
+    # CHECK DATA FORMAT
+    required_cols = get_known('price_strategy_columns')
+    try:
+        prices = prices[required_cols]
+    except Exception:
+        raise(ValueError('Please check the price strategy solution format.'))
+    # CHECK THERE IS ONLY 1 PRICE PER TIME-STEP PER LATENCY SENSITIVITY
+    # AND SERVER GENERATION
+    prices = prices.drop_duplicates(['time_step',
+                                     'latency_sensitivity',
+                                     'server_generation'],
+                                     inplace=False,
+                                     ignore_index=True)
+    prices = prices[prices['price'] >= 0].copy()
+    return prices
+
+
+def change_elasticity_format(elasticity):
+    # ADJUST THE FORMAT OF THE ELASTICITY DATAFRAME TO GET ALONG WITH THE
+    # REST OF CODE
+    elasticity = elasticity.pivot(index='server_generation', columns='latency_sensitivity')
+    elasticity.columns = elasticity.columns.droplevel(0)
+    return elasticity
+
+
 def change_selling_prices_format(selling_prices):
     # ADJUST THE FORMAT OF THE SELLING PRICES DATAFRAME TO GET ALONG WITH THE
     # REST OF CODE
@@ -173,12 +209,12 @@ def get_time_step_demand(demand, ts):
     # GET THE DEMAND AT A SPECIFIC TIME-STEP t
     d = demand[demand['time_step'] == ts]
     d = d.set_index('server_generation', drop=True, inplace=False)
-    d = d.drop(columns='time_step', inplace=False)
+    d = d.drop(columns='time_step', inplace=False).astype('float')
     return d
 
 
 def get_time_step_fleet(solution, ts):
-    # GET THE SOLUTION AT A SPECIFIC TIME-STEP 
+    # GET THE FLEET AT A SPECIFIC TIME-STEP 
     if ts in solution['time_step'].values:
         s = solution[solution['time_step'] == ts]
         s = s.drop_duplicates('server_id', inplace=False)
@@ -187,6 +223,54 @@ def get_time_step_fleet(solution, ts):
         return s
     else:
         return pd.DataFrame()
+
+
+def get_time_step_prices(pricing_strategy, ts):
+    # GET THE PRICES AT A SPECIFIC TIME-STEP 
+    if ts in pricing_strategy['time_step'].values:
+        s = pricing_strategy[pricing_strategy['time_step'] == ts]
+        s = s.drop(columns='time_step', inplace=False)
+        s = s.pivot(index='server_generation', columns='latency_sensitivity')
+        s.columns = s.columns.droplevel(0)
+        return s
+    else:
+        return pd.DataFrame()
+
+
+def update_selling_prices(selling_prices, ts_prices):
+    # UPDATE THE SELLING PRICES ACCORDING TO THE PRICING STRATEGY
+    if ts_prices.empty:
+        return selling_prices
+    else:
+        selling_prices.update(ts_prices)
+        return selling_prices
+
+
+def update_demand_according_to_prices(D, selling_prices, base_prices, elasticity):
+    # UPDATE THE DEMAND ACCORDING TO THE NEW PRICES
+    new_prices = selling_prices.ne(base_prices)
+    ix = new_prices.where(selling_prices.ne(base_prices)).stack().index.tolist()
+    if ix:
+        SG = D.index.values
+        for sg, ls in ix:
+            if sg in SG:
+                d0 = D.loc[sg, ls]
+                p0 = base_prices.loc[sg, ls]
+                p1 = selling_prices.loc[sg, ls]
+                e = elasticity.loc[sg, ls]
+                d1 = get_new_demand_for_new_price(d0, p0, p1, e)
+                D.loc[sg, ls] = d1
+    return D
+
+
+def get_new_demand_for_new_price(d0, p0, p1, e):
+    # CALCULATE THE NEW DEMAND ACCORDING TO THE NEW PRICE
+    delta_p = (p1 - p0) / p0
+    delta_p_e = delta_p * e
+    d1 = d0 * (1 + delta_p_e)
+    if d1 < 0:
+        return 0
+    return int(d1)
 
 
 def get_capacity_by_server_generation_latency_sensitivity(fleet):
@@ -341,23 +425,29 @@ def update_check_lifespan(fleet):
     return fleet
 
 
-def get_evaluation(solution, 
+def get_evaluation(fleet, 
+                   pricing_strategy, 
                    demand,
                    datacenters,
                    servers,
                    selling_prices,
+                   elasticity,
                    time_steps=get_known('time_steps'), 
                    verbose=1):
 
     # SOLUTION EVALUATION
-    
-    # SOLUTION DATA PREPARATION
-    solution = solution_data_preparation(solution, 
-                                         servers, 
-                                         datacenters, 
-                                         selling_prices)
 
+    # SOLUTION DATA PREPARATION
+    fleet = fleet_data_preparation(fleet, 
+                                   servers, 
+                                   datacenters, 
+                                   selling_prices)
+
+    # PRICING STRATEGY DATA PREPARATION
+    pricing_strategy = pricing_data_preparation(pricing_strategy)
+    elasticity = change_elasticity_format(elasticity)
     selling_prices = change_selling_prices_format(selling_prices)
+    base_prices = selling_prices.copy()
 
     # DEMAND DATA PREPARATION
     demand = get_actual_demand(demand)
@@ -370,7 +460,16 @@ def get_evaluation(solution,
         D = get_time_step_demand(demand, ts)
 
         # GET THE SERVERS DEPLOYED AT TIMESTEP ts
-        ts_fleet = get_time_step_fleet(solution, ts)
+        ts_fleet = get_time_step_fleet(fleet, ts)
+
+        # GET THE PRICES AT TIMESTEP ts
+        ts_prices = get_time_step_prices(pricing_strategy, ts)
+
+        # UPDATE THE SELLING PRICES ACCORDING TO PRICES AT TIMESTEP ts
+        selling_prices = update_selling_prices(selling_prices, ts_prices)
+
+        # UPDATE THE DEMAND ACCORDING TO PRICES AT TIMESTEP ts
+        D = update_demand_according_to_prices(D, selling_prices, base_prices, elasticity)
 
         if ts_fleet.empty and not FLEET.empty:
             ts_fleet = FLEET
@@ -380,28 +479,25 @@ def get_evaluation(solution,
         # UPDATE FLEET
         FLEET = update_fleet(ts, FLEET, ts_fleet)
 
-        if(ts==1):
-            print(FLEET.columns)
-  
         # CHECK IF THE FLEET IS EMPTY
         if FLEET.shape[0] > 0:
             # GET THE SERVERS CAPACITY AT TIMESTEP ts
             Zf = get_capacity_by_server_generation_latency_sensitivity(FLEET)
-    
+
             # CHECK CONSTRAINTS
             check_datacenter_slots_size_constraint(FLEET)
-    
+
             # EVALUATE THE OBJECTIVE FUNCTION AT TIMESTEP ts
-            U = get_utilization(D, Zf)
-    
-            L = get_normalized_lifespan(FLEET)
-    
+            # U = get_utilization(D, Zf)
+
+            # L = get_normalized_lifespan(FLEET)
+
             P = get_profit(D, 
                            Zf, 
                            selling_prices,
                            FLEET)
-            o = U * L * P
-            OBJECTIVE += o
+
+            OBJECTIVE += P
 
             # PUT ENTIRE FLEET on HOLD ACTION
             FLEET = put_fleet_on_hold(FLEET)
@@ -409,15 +505,11 @@ def get_evaluation(solution,
             # PREPARE OUTPUT
             output = {'time-step': ts,
                       'O': round(OBJECTIVE, 2),
-                      'U': round(U, 2),
-                      'L': round(L, 2),
                       'P': round(P, 2)}
         else:
             # PREPARE OUTPUT
             output = {'time-step': ts,
                       'O': np.nan,
-                      'U': np.nan,
-                      'L': np.nan,
                       'P': np.nan}
 
         if verbose:
@@ -426,11 +518,13 @@ def get_evaluation(solution,
     return OBJECTIVE
 
 
-def evaluation_function(solution, 
+def evaluation_function(fleet, 
+                        pricing_strategy, 
                         demand,
                         datacenters,
                         servers,
                         selling_prices,
+                        elasticity,
                         time_steps=get_known('time_steps'), 
                         seed=None,
                         verbose=0):
@@ -440,8 +534,10 @@ def evaluation_function(solution,
 
     Parameters
     ----------
-    solution : pandas DataFrame
-        This is a solution to the problem. This is provided by the partecipant.
+    fleet : pandas DataFrame
+        This is a fleet of servers. This is provided by the partecipant.
+    pricing_strategy : pandas DataFrame
+        This is a pricing strategy. This is provided by the partecipant.
     demand : pandas DataFrame
         This is the demand data. This is provided by default in the data 
         folder.
@@ -454,6 +550,9 @@ def evaluation_function(solution,
     selling_prices : pandas DataFrame
         This is the selling prices data. This is provided by default in the 
         data folder.
+    elasticity : pandas DataFrame
+        This is the price elasticity of demand data. This is provided by 
+        default in the data folder.
     time_steps : int
         This is the number of time-steps for which we need to evaluate the 
         solution.
@@ -470,23 +569,18 @@ def evaluation_function(solution,
     # SET RANDOM SEED
     np.random.seed(seed)
     # EVALUATE SOLUTION
-    # try:
-    #     return get_evaluation(solution, 
-    #                           demand,
-    #                           datacenters,
-    #                           servers,
-    #                           selling_prices,
-    #                           time_steps=time_steps, 
-    #                           verbose=verbose)
-    # # CATCH EXCEPTIONS
-    # except Exception as e:
-    #     logger.error(e)
-    #     return None
+    try:
+        return get_evaluation(fleet, 
+                                pricing_strategy, 
+                                demand,
+                                datacenters,
+                                servers,
+                                selling_prices,
+                                elasticity,
+                                time_steps=time_steps, 
+                                verbose=verbose)
+    # CATCH EXCEPTIONS
+    except Exception as e:
+        logger.error(e)
+        return None
 
-    return get_evaluation(solution, 
-                            demand,
-                            datacenters,
-                            servers,
-                            selling_prices,
-                            time_steps=time_steps, 
-                            verbose=verbose)

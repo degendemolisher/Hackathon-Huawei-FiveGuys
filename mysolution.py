@@ -8,10 +8,10 @@ from evaluation import get_actual_demand
 
 def get_my_solution(d):
     # This is just a placeholder.
-    return [{}]
+    return pd.DataFrame(), pd.DataFrame()
 
 
-seeds = known_seeds('training')
+seeds = known_seeds()
 
 demand = pd.read_csv('./data/demand.csv')
 for seed in seeds:
@@ -22,7 +22,8 @@ for seed in seeds:
     actual_demand = get_actual_demand(demand)
 
     # CALL YOUR APPROACH HERE
-    solution = get_my_solution(actual_demand)
+    fleet, pricing_strategy = get_my_solution(actual_demand)
 
     # SAVE YOUR SOLUTION
-    save_solution(solution, f'./output/{seed}.json')
+    save_solution(fleet, pricing_strategy, f'./output/{seed}.json')
+
