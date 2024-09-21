@@ -2,17 +2,20 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+
 import numpy as np
 import pandas as pd
+from utils import load_json, save_json
+from demand_flattening.post_flattening import post_flatten_demand
 from greedy_profit_v2.greedy_profit_algorithm import greedy_profit_algorithm
 from greedy_profit_v2.results import save_results_as_actions
 from seeds import known_seeds
 from evaluation import get_actual_demand
 
 
-def get_solution():
+def get_solution(enable_post_demand_flattening=False):
     
-    seeds = known_seeds('test')
+    seeds = known_seeds()
 
     demand = pd.read_csv('./data/demand.csv')
     for seed in seeds:
@@ -37,7 +40,18 @@ def get_solution():
         # Save the results as actions
         save_results_as_actions(file_path, results)
 
+        if enable_post_demand_flattening:
+            # POST DEMAND FLATTENING
+            pricing_strategy = post_flatten_demand(file_path, actual_demand)
+
+            fleet = load_json(file_path)["fleet"]
+            data = {
+                "fleet": fleet,
+                "pricing_strategy": pricing_strategy
+            }
+            save_json(file_path, data)
+
 if __name__ == '__main__':
-    get_solution()
+    get_solution(enable_post_demand_flattening=True)
     print('----------------------------')
     print('All seeds have been processed')
