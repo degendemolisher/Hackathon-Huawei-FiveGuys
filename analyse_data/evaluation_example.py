@@ -14,26 +14,28 @@ def make_readable(value):
         string = value[len(value)-1-i]+string
     return string
 
-seeds = known_seeds('training')
+seeds = known_seeds()
 
 scores = []
 
 for seed in seeds:
 
     # LOAD SOLUTION
-    solution = load_solution('output/'+str(seed)+'.json')
+    fleet, pricing_strategy = load_solution('output/'+str(seed)+'.json')
 
     # LOAD PROBLEM DATA
-    demand, datacenters, servers, selling_prices = load_problem_data()
+    demand, datacenters, servers, selling_prices, elasticity = load_problem_data()
 
     # EVALUATE THE SOLUTION
-    score = evaluation_function(solution,
+    score = evaluation_function(fleet,
+                                pricing_strategy,
                                 demand,
                                 datacenters,
-                                servers,
+                                servers,   
                                 selling_prices,
+                                elasticity,
                                 seed=seed,
-                                verbose=False)
+                                verbose=0)
     print(make_readable(score))
     scores.append(score)
 

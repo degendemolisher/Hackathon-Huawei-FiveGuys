@@ -134,6 +134,7 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
     x = np.reshape(x,(chunks, 4, 7))
     y = np.reshape(y,(TIMESTEPS,3,7))
     #x = shape(TIMESTEPS,DATACENTER,SERVERGEN)
+    all_lifespanner = []
     revenues = []
     costs = []
     #for each datacenter
@@ -201,9 +202,11 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
     # print(np.sum(x_minus_z_arr, axis=2)[24][0][1])
     # print(np.sum(x_minus_z_arr, axis=2).shape)
 
-    mult_array = np.empty((96,7))
-    for i in range(7):
-        mult_array[:,i] = np.arange(1,97)/96
+    # mult_array = np.empty((96,7))
+    # for i in range(7):
+    #     mult_array[:,i] = np.arange(1,97)/96
+
+    mult_array = np.arange(1,97,step_size)
 
     for datacenter in range(4):
         #get generated revenue at each timestep
@@ -212,16 +215,32 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
         dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == lat_sens]["selling_price"].to_numpy()
         dc_revenues = []
         max_servers = int(96/step_size)
-        
+
+        dc_lifespanner = []
         #skip dc4 as calc for dc3 already includes the info for dc4
         if(datacenter != 3):
             for timestep in range(TIMESTEPS):
+                ts_servers = x_minus_z_arr[timestep, datacenter].copy()
+                chunk = int(timestep/step_size)
+                curr_max = min(max_in_existance, chunk+1)
+                curr_max2 = min(max_in_existance-1, chunk)
+                if(timestep>=step_size):
+                    calcs = []
+                    for servergen in range(7):
+                        calc = dc_selling_prices[servergen] * curr_max #timestep-i*step_size
+                        servers_lifespan = []
+                        for i in range(curr_max2):
+                            servers_lifespan.append(ts_servers[servergen][i] * mult_array[curr_max2-i])
+                        calc = calc * np.sum(servers_lifespan)-(np.sum(servers_lifespan)*curr_max)
+                        calcs.append(calc)
+                    dc_lifespanner.append(np.sum(calcs))
                 supply = y[timestep, datacenter]
                 revenue = []
                 for j in range(7):
                     revenue.append(supply[j]*dc_selling_prices[j])
                 revenue = np.sum(revenue)
                 dc_revenues.append(revenue)
+            all_lifespanner.append(dc_lifespanner)
             revenues.append(dc_revenues)
         #calc energycost for all servergens at the datacenter
         energy_costs = server_energies * datacenters[datacenters["datacenter_id"] == dc_id]["cost_of_energy"].to_numpy()
@@ -290,16 +309,22 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
 
     #after all of the profits and costs have been calculated for all the datacenters at each timestep,
     #get sum of costs for the datacenters and the sum of profits for all datacenters at each timestep
+    lifespan_sum = np.sum(all_lifespanner, axis=0)
     costs_sum = np.sum(costs, axis=0)
     revenue_sum = np.sum(revenues, axis=0)
-    return revenue_sum, costs_sum
+    return revenue_sum, costs_sum, lifespan_sum
 
 def objective_func(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
-    revenues, costs = profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP)
+    revenues, costs, lifespan = profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP)
     #get profit at each timestep
     profit_arr = []
     for i in range(TIMESTEPS):
-        profit_arr.append(revenues[i]-costs[i])
+        # if(i>=step_size):
+        #     ts_profit = (lifespan[i-step_size]+(revenues[i]-costs[i]))*(1/96)
+        # else:
+        #     ts_profit = (revenues[i]-costs[i])*(i/96)
+        ts_profit = revenues[i]-costs[i]
+        profit_arr.append(ts_profit)
     Objective = np.sum(profit_arr)
     return Objective
 
@@ -308,7 +333,7 @@ from ortools.linear_solver import pywraplp
 from ortools.constraint_solver import pywrapcp
 from ortools.sat.python import cp_model
 
-def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
+def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=6, START_STEP=1, TIMESTEPS=168):
     demand2 = demand.merge(datacenters, on="latency_sensitivity", how="left")
     START_STEP2 = START_STEP
     TIMESTEPS2 = TIMESTEPS
@@ -318,6 +343,16 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     # Create the solver
     # solver = pywraplp.Solver.CreateSolver("SAT")
     solver = cp_model.CpModel()
+
+    new_demand = []
+    delta_p = []
+    for latency in range(3):
+        for timestep in range(TIMESTEPS2):
+            for servergen in range(7):
+                dp = (prices[timestep, latency, servergen]-purchase_prices[servergen])/purchase_prices[servergen]
+                delta_p.append(dp)
+
+    #SELF NOTE: PRICES WILL BE AN ARRAY OF SHAPE:TIMESTEPS,LATENCY,SERVERGEN (same as y) CAN HAVE STEP_SIZE ASWELL
 
     # Variables
     # x is the bought servergens at each timestep chunk/checkpoint
@@ -332,6 +367,8 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     y = []
     #boolean variable that each bind to a x val, used to add if then links later NEEDS SIMILAR GOOFY SHAPE AS Z
     b = []
+    #array of profit chain for the boolean to apply lifespan to profit calcs
+    profit_chain = []
     c = 0
     #makes an array of size (chunks * dc_num * servergen_num)
     for i in range(chunks):
@@ -470,12 +507,12 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
                         x_minus_z_arr[timestep][datacenter][servergen][chunk] = ts_x - discard
     
     #init the b binding variables
-    for chunk in range(chunks):
-        curr_max = min(max_in_existance, chunk+1)
-        for datacenter in range(4):
-            for servergen in range(7):
-                for server in range(curr_max):
-                    b.append(solver.NewBoolVar(f"b{c}"))
+    # for chunk in range(chunks):
+    #     curr_max = min(max_in_existance, chunk+1)
+    #     for datacenter in range(4):
+    #         for servergen in range(7):
+    #             for server in range(curr_max):
+    #                 b.append(solver.NewBoolVar(f"b{c}"))
 
 
     #below code gives an array of the cumsum with lifespan at each timestep for each server factored in
@@ -637,7 +674,6 @@ def max_profit(demand, step_size=6, START_STEP=1, TIMESTEPS=168):
     #     curr_chunk = int(timestep/step_size)
     #     for datacenter in range(4):
     #         for servergen in range(7):
-
 
 
     #print("Number of constraints =", solver.NumConstraints())
