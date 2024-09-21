@@ -18,9 +18,8 @@ def get_my_solution(d):
 
     prices_step_size = 12
     step_size = 6
-    prices = big.generate_prices(prices_step_size)
 
-    result_df = max_profit(ddd, prices=prices, prices_step_size=prices_step_size, step_size=step_size)
+    result_df = max_profit(ddd, step_size=step_size)
     #result_df.to_csv('out2.csv', index=True)
     # valid = verify_solution_integrity(result_df)
     # if(not valid):
@@ -29,12 +28,12 @@ def get_my_solution(d):
     # print(buy_array)
     #buy_array.extend(big.buy_all(result_df2))
     #buy_array = buy_array.flatten()
-    pricing_strategy = pd.DataFrame(data={
+    pricing_strategy = pd.DataFrame(data=[{
 						"time_step": 1,
 						"latency_sensitivity": "low",
 						"server_generation": "CPU.S1",
 						"price": 10
-						},columns=["time_step"])
+						}],columns=["time_step"])
     return buy_array, pricing_strategy
 
 

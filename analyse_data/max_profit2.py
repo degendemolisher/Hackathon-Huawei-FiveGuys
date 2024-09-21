@@ -344,13 +344,13 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
     # solver = pywraplp.Solver.CreateSolver("SAT")
     solver = cp_model.CpModel()
 
-    new_demand = []
-    delta_p = []
-    for latency in range(3):
-        for timestep in range(TIMESTEPS2):
-            for servergen in range(7):
-                dp = (prices[timestep, latency, servergen]-purchase_prices[servergen])/purchase_prices[servergen]
-                delta_p.append(dp)
+    # new_demand = []
+    # delta_p = []
+    # for latency in range(3):
+    #     for timestep in range(TIMESTEPS2):
+    #         for servergen in range(7):
+    #             dp = (prices[timestep, latency, servergen]-purchase_prices[servergen])/purchase_prices[servergen]
+    #             delta_p.append(dp)
 
     #SELF NOTE: PRICES WILL BE AN ARRAY OF SHAPE:TIMESTEPS,LATENCY,SERVERGEN (same as y) CAN HAVE STEP_SIZE ASWELL
 
