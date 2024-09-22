@@ -24,7 +24,7 @@ def get_my_solution(d):
         mask = (elasticity["server_generation"] == sgen) & (elasticity["latency_sensitivity"] == latency)
         sgen_elasticity = elasticity[mask]["elasticity"].iloc[0]
         min_dP = -1 * ((sgen_elasticity+1)/sgen_elasticity)
-        # min_dP/=2
+        min_dP/=2
 
         dc_selling_price = selling_prices[mask]["selling_price"].iloc[0]
         min_p = (min_dP + 1) * dc_selling_price
@@ -45,8 +45,8 @@ def get_my_solution(d):
     step_size = 6
     # prices = big.simulated_annealing(10, demand=ddd, prices_step_size=prices_step_size, step_size=12)
 
-    # rng = np.random.default_rng()
-    # prices = big.generate_prices(rng, prices_step_size)
+    rng = np.random.default_rng()
+    prices = big.generate_prices(rng, prices_step_size)
 
     result_df, profit = max_profit(ddd, prices=prices, prices_step_size=prices_step_size, step_size=step_size)
     #result_df.to_csv('out2.csv', index=True)
