@@ -3,13 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.stats import truncweibull_min
+from ortools.pdlp import solve_log_pb2
+from ortools.pdlp import solvers_pb2
+from ortools.pdlp.python import pdlp
 #import pyspark as spark
 
 #read contents of csv into variables
-datacenters = pd.read_csv("../data/datacenters.csv")
-selling_prices = pd.read_csv("../data/selling_prices.csv")
-servers = pd.read_csv("../data/servers.csv")
-elasticity = pd.read_csv("data/price_elasticity_of_demand.csv")
+datacenters = pd.read_csv("./data/datacenters.csv")
+selling_prices = pd.read_csv("./data/selling_prices.csv")
+servers = pd.read_csv("./data/servers.csv")
+elasticity = pd.read_csv("./data/price_elasticity_of_demand.csv")
 
 # %%
 index_to_dcid = {0:"DC1",1:"DC2",2:"DC3",3:"DC4"}
@@ -594,7 +597,7 @@ def max_profit(demand, ls=[] ,prices=[], prices_step_size=12, step_size=6, START
 
     #to ensure 1:1 mapping we must also add the restiction of: x - all z affecting that timestep >=0
     #e.g. x0 - z0-z56-z172 >=0
-    # print(re_z1_cumsum[5][0][0][0])
+    # print(re_z1_cumsum[5][0][0][0])1
     for datacenter in range(4):
         dc_id = index_to_dcid[datacenter]
         for timestep in range(TIMESTEPS2):
@@ -677,31 +680,78 @@ def max_profit(demand, ls=[] ,prices=[], prices_step_size=12, step_size=6, START
                     s = x_minus_z_arr[timestep][datacenter][servergen][server]
                     solver.Add(s >= 0)
 
+    solve_max_profit(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP, return_df, negative)
     #print("Number of constraints =", solver.NumConstraints())
 
     #solver.parameters.max_time_in_seconds = 10.0
 
-    # Objective
-    solver.Maximize(objective_func(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP))
+def solve_max_profit(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP, return_df, negative):
+    # Define the optimization problem
+    lp = pdlp.QuadraticProgram()
+    lp.objective_offset = 0  # Adjust as needed
+    lp.objective_vector = objective_func(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP)
+
     
-    # Solve
-    solver2 = cp_model.CpSolver()
-    status = solver2.Solve(solver)
-    # status = solver.Solve()
-    if status == cp_model.OPTIMAL:
-        print('Total value =', make_readable(solver2.ObjectiveValue()))
+    # Define constraints and bounds here
+    # lp.constraint_lower_bounds = [...]
+    # lp.constraint_upper_bounds = [...]
+    # lp.variable_lower_bounds = [...]
+    # lp.variable_upper_bounds = [...]
+    # lp.constraint_matrix = scipy.sparse.csc_matrix([...])
+
+    # Set up solver parameters
+    params = solvers_pb2.PrimalDualHybridGradientParams()
+    optimality_criteria = params.termination_criteria.simple_optimality_criteria
+    optimality_criteria.eps_optimal_relative = 1.0e-6
+    optimality_criteria.eps_optimal_absolute = 1.0e-6
+    params.termination_criteria.time_sec_limit = np.inf
+    params.num_threads = 1
+    params.verbosity_level = 0
+    params.presolve_options.use_glop = False
+
+    # Solve the problem
+    result = pdlp.primal_dual_hybrid_gradient(lp, params)
+    solve_log = result.solve_log
+
+    if solve_log.termination_reason == solve_log_pb2.TERMINATION_REASON_OPTIMAL:
+        print("Solve successful")
+        objective_value = result.primal_solution  # Adjust as needed
     else:
-        print('The problem does not have an optimal solution.')
+        print("Solve not successful. Status:", solve_log_pb2.TerminationReason.Name(solve_log.termination_reason))
         return "no solution"
-    
-    if(return_df):
-        result_df = result_to_df(x,z,step_size,START_STEP2,TIMESTEPS2, solver2)
-        return result_df, solver2.ObjectiveValue()
+
+    if return_df:
+        result_df = result_to_df(x, z, step_size, START_STEP, TIMESTEPS2, result)
+        return result_df, objective_value
     else:
-        if(negative):
-            return -1* solver2.ObjectiveValue()
+        if negative:
+            return -1 * objective_value
         else:
-            return solver2.ObjectiveValue()
+            return objective_value
+
+    
+
+    # # Objective
+    # solver.Maximize(objective_func(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP))
+    
+    # # Solve
+    # solver2 = cp_model.CpSolver()
+    # status = solver2.Solve(solver)
+    # # status = solver.Solve()
+    # if status == cp_model.OPTIMAL:
+    #     print('Total value =', make_readable(solver2.ObjectiveValue()))
+    # else:
+    #     print('The problem does not have an optimal solution.')
+    #     return "no solution"
+    
+    # if(return_df):
+    #     result_df = result_to_df(x,z,step_size,START_STEP2,TIMESTEPS2, solver2)
+    #     return result_df, solver2.ObjectiveValue()
+    # else:
+    #     if(negative):
+    #         return -1* solver2.ObjectiveValue()
+    #     else:
+    #         return solver2.ObjectiveValue()
 
 # %%
 # default =[[[  10,   10,   10,   10,   10,   10,   10,   10,   10,   10,   10,
