@@ -133,7 +133,7 @@ def change_selling_prices_format(selling_prices):
     return selling_prices
 
 
-def get_actual_demand(demand):
+def get_actual_demand(demand: pd.DataFrame) -> pd.DataFrame:
     # CALCULATE THE ACTUAL DEMAND AT TIME-STEP t
     actual_demand = []
     for ls in get_known('latency_sensitivity'):
@@ -169,7 +169,7 @@ def get_random_walk(n, mu, sigma):
     return ts
 
 
-def get_time_step_demand(demand, ts):
+def get_time_step_demand(demand: pd.DataFrame, ts: int) -> pd.DataFrame:
     # GET THE DEMAND AT A SPECIFIC TIME-STEP t
     d = demand[demand['time_step'] == ts]
     d = d.set_index('server_generation', drop=True, inplace=False)
@@ -187,6 +187,54 @@ def get_time_step_fleet(solution, ts):
         return s
     else:
         return pd.DataFrame()
+
+
+def get_time_step_prices(pricing_strategy, ts):
+    # GET THE PRICES AT A SPECIFIC TIME-STEP 
+    if ts in pricing_strategy['time_step'].values:
+        s = pricing_strategy[pricing_strategy['time_step'] == ts]
+        s = s.drop(columns='time_step', inplace=False)
+        s = s.pivot(index='server_generation', columns='latency_sensitivity')
+        s.columns = s.columns.droplevel(0)
+        return s
+    else:
+        return pd.DataFrame()
+
+
+def update_selling_prices(selling_prices: pd.DataFrame, ts_prices):
+    # UPDATE THE SELLING PRICES ACCORDING TO THE PRICING STRATEGY
+    if ts_prices.empty:
+        return selling_prices
+    else:
+        selling_prices.update(ts_prices)
+        return selling_prices
+
+
+def update_demand_according_to_prices(D: pd.DataFrame, selling_prices: pd.DataFrame, base_prices: pd.DataFrame, elasticity: pd.DataFrame):
+    # UPDATE THE DEMAND ACCORDING TO THE NEW PRICES
+    new_prices = selling_prices.ne(base_prices)
+    ix = new_prices.where(selling_prices.ne(base_prices)).stack().index.tolist()
+    if ix:
+        SG = D.index.values
+        for sg, ls in ix:
+            if sg in SG:
+                d0 = D.loc[sg, ls]
+                p0 = base_prices.loc[sg, ls]
+                p1 = selling_prices.loc[sg, ls]
+                e = elasticity.loc[sg, ls]
+                d1 = get_new_demand_for_new_price(d0, p0, p1, e)
+                D.loc[sg, ls] = d1
+    return D
+
+
+def get_new_demand_for_new_price(d0, p0, p1, e):
+    # CALCULATE THE NEW DEMAND ACCORDING TO THE NEW PRICE
+    delta_p = (p1 - p0) / p0
+    delta_p_e = delta_p * e
+    d1 = d0 * (1 + delta_p_e)
+    if d1 < 0:
+        return 0
+    return int(d1)
 
 
 def get_capacity_by_server_generation_latency_sensitivity(fleet):
@@ -370,7 +418,21 @@ def get_evaluation(solution,
         D = get_time_step_demand(demand, ts)
 
         # GET THE SERVERS DEPLOYED AT TIMESTEP ts
-        ts_fleet = get_time_step_fleet(solution, ts)
+        ts_fleet = get_time_step_fleet(fleet, ts)
+
+        # GET THE PRICES AT TIMESTEP ts
+        ts_prices = get_time_step_prices(pricing_strategy, ts)
+
+        # UPDATE THE SELLING PRICES ACCORDING TO PRICES AT TIMESTEP ts
+        selling_prices = update_selling_prices(selling_prices, ts_prices)
+
+        # UPDATE THE DEMAND ACCORDING TO PRICES AT TIMESTEP ts
+        # print(f"Prices at timestep {ts}: \n{ts_prices}\n")
+        # print(f"_____________Base prices: \n{base_prices}\n")
+        # print(f"_____________Selling prices: \n{selling_prices}\n")
+        # print(f"_________D before: \n{D}\n")
+        D = update_demand_according_to_prices(D, selling_prices, base_prices, elasticity)
+        print(f"_________D after: \n{D}\n")
 
         if ts_fleet.empty and not FLEET.empty:
             ts_fleet = FLEET

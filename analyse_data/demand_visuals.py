@@ -8,6 +8,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from evaluation import *
+from utils import load_problem_data, load_solution
 from seeds import known_seeds
 
 
@@ -26,7 +27,9 @@ class DemandTracker():
         self.json_filename = json_filename
         self.current_server_capacity = {dc: {gen: [0] * (self.MAX_TIMESTEP + 1) for gen in self.SERVER_GENERATIONS} for dc in self.DATACENTERS}
         self.servers = {}
+        self.base_demand = demand
         self.demand = pd.DataFrame(self.csv_format_demand(demand))
+        self.new_demand = pd.DataFrame()
 
     def csv_format_demand(self, demand):
         columns = ["time_step","latency_sensitivity","CPU.S1","CPU.S2","CPU.S3","CPU.S4"
@@ -51,30 +54,69 @@ class DemandTracker():
 
     def process_actions(self):
         json_file_path = os.path.join(self.solution_json_dir, self.json_filename)
-        with open(json_file_path, 'r') as f:
-            actions = json.load(f)['fleet']
-            for action in actions:
-                dc_id = action['datacenter_id']
-                time_step = action['time_step']
-                server_gen = action['server_generation']
-                server_id = action['server_id']
-                capacity = self.SERVER_CAPACITY[server_gen]
-    
-                if action['action'] == 'buy':
-                    self.servers[server_id] = {
-                        'datacenter_id': dc_id,
-                        'server_generation': server_gen,
-                        'buy_time': time_step
-                    }
-                    for t in range(time_step, min(time_step + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP)):
-                        self.current_server_capacity[dc_id][server_gen][t] += capacity
-                elif action['action'] == 'dismiss':
-                    if server_id in self.servers:
-                        buy_time = self.servers[server_id]['buy_time']
-                        server_gen = self.servers[server_id]['server_generation']
-                        for t in range(time_step, min(buy_time + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP)):
-                            self.current_server_capacity[dc_id][server_gen][t] -= capacity
-                        del self.servers[server_id]
+        fleet, pricing_strategy = load_solution(json_file_path)
+
+        for _, action in fleet.iterrows():
+            dc_id = action['datacenter_id']
+            time_step = action['time_step']
+            server_gen = action['server_generation']
+            server_id = action['server_id']
+            capacity = self.SERVER_CAPACITY[server_gen]
+
+            if action['action'] == 'buy':
+                self.servers[server_id] = {
+                    'datacenter_id': dc_id,
+                    'server_generation': server_gen,
+                    'buy_time': time_step
+                }
+                for t in range(time_step, min(time_step + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP) + 1):
+                    self.current_server_capacity[dc_id][server_gen][t] += capacity
+            elif action['action'] == 'dismiss':
+                if server_id in self.servers:
+                    buy_time = self.servers[server_id]['buy_time']
+                    server_gen = self.servers[server_id]['server_generation']
+                    for t in range(time_step, min(buy_time + self.LIFE_EXPECTANCY, self.MAX_TIMESTEP) + 1):
+                        self.current_server_capacity[dc_id][server_gen][t] -= capacity
+                    del self.servers[server_id]
+                    
+        # pricing
+        # for each servergen and latency get mask
+        base_prices = pd.read_csv('./data/selling_prices.csv')
+        elasticity = pd.read_csv('./data/price_elasticity_of_demand.csv')
+        # get base demand
+        for servergen in self.SERVER_GENERATIONS:
+            for latency in ['low', 'medium', 'high']:
+                mask = (pricing_strategy['server_generation'] == servergen) & (pricing_strategy['latency_sensitivity'] == latency)
+                server_new_prices = pricing_strategy[mask]
+                print(server_new_prices)
+                # make new price_change array (all NaN)
+                price_change = pd.DataFrame()
+                price_change['time_step'] = range(0, self.MAX_TIMESTEP + 1)
+                price_change['price_multiplier'] = np.nan
+                # fill in the new prices
+                for _, row in server_new_prices.iterrows():
+                    time_step = row['time_step']
+                    new_price = row['price_multiplier']
+                    price_change.loc[time_step, 'price_multiplier'] = new_price
+                # fill in base price
+                base_price = base_prices[(base_prices['server_generation'] == servergen) & (base_prices['latency_sensitivity'] == latency)]['selling_price'].values[0]
+                price_change.loc[0, 'price_multiplier'] = base_price
+                print(price_change)
+                # divide the price column by the base price
+                price_change['price'] = price_change['price'] / base_price
+                print(price_change)
+                # make a new column for the new demand
+                price_change['new_demand'] = np.nan
+                server_elasticity = elasticity[(elasticity['server_generation'] == servergen) & (elasticity['latency_sensitivity'] == latency)]['elasticity'].values[0]
+                # fill in the new demand, demand = base_demand * (price_multiplier * elasticity)
+                # if there is price change, fill in the new demand
+                for i in range(1, self.MAX_TIMESTEP + 1):
+                    if not np.isnan(price_change.loc[i, 'price_multiplier']):
+                        price_multiplier = price_change.loc[i, 'price_multiplier']
+                        price_change.loc[i, 'new_demand'] = self.base_demand.loc[i, servergen] * price_multiplier * server_elasticity
+
+                break
+            break
 
     def plot_demand(self, demand_df):
         latency_sensitivities = ["low", "medium", "high"]
@@ -86,7 +128,7 @@ class DemandTracker():
             for j, latency in enumerate(latency_sensitivities):
                 ax: plt.Axes = axes[i * len(latency_sensitivities) + j]
                 subset = demand_df[demand_df["latency_sensitivity"] == latency]
-                # ax.plot(subset["time_step"], subset[server], label='Demand')
+                # Plot demand data
                 ax.plot(subset["time_step"].values, subset[server].values, label='Demand')
                 
                 # Extract and plot the capacity data
@@ -105,7 +147,12 @@ class DemandTracker():
                 else:
                     for dc in dc_to_latency[latency]:
                         capacity_data.extend(self.current_server_capacity[dc][server])
+                # Plot capacity data
                 ax.plot(range(len(capacity_data)), capacity_data, label='Capacity')
+                # Plot new_demand data
+                new_subset = self.new_demand[['time_step', 'server_generation', latency]]
+                new_demand_data = new_subset[new_subset['server_generation'] == server]
+                ax.plot(new_demand_data['time_step'], new_demand_data[latency], label=server, linestyle='dashed')
             
                 ax.set_title(f'Demand and Capacity for {server} ({latency} latency) Over Time')
                 ax.set_xlabel('Time Step')
@@ -131,6 +178,6 @@ for seed in seeds: # type: ignore
     np.random.seed(seed)
     print(f"Seed: {seed}")
     actual_demand = get_actual_demand(pd.read_csv('./data/demand.csv')) 
-    tracker = DemandTracker('output', f'{seed}.json', actual_demand)
+    tracker = DemandTracker('output/solutions/lp', f'{seed}.json', actual_demand)
     tracker.run()
-    # break
+    break
