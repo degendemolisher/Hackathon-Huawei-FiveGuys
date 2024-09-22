@@ -42,6 +42,7 @@ def calculate_new_price(d0, d1, p0, e):
     p0: old price
     e: price elasticity of demand
     """
+    # VERSION 1
     # Avoid division by zero
     if d0 == 0:
         return p0
@@ -52,12 +53,23 @@ def calculate_new_price(d0, d1, p0, e):
 
     # Ensure price is non-negative
     return max(p1, 0)
+    
+    # VERSION 2
+    # Calculate delta_p using the optimal formula
+    # delta_p = -(e + 1) / (2 * e)
+    
+    # # Calculate the new price
+    # p1 = p0 * (1 + delta_p)
+    
+    # return max(p1, 0)  # Ensure price is non-negative
 
 
-def adjust_prices_and_demand(actual_demand: pd.DataFrame, 
-                             moving_average: pd.DataFrame, 
+# VERSION 1
+def adjust_prices_and_demand(actual_demand: pd.DataFrame,  
                              selling_prices: pd.DataFrame, 
-                             price_elasticity: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                             price_elasticity: pd.DataFrame,
+                             moving_average: pd.DataFrame,) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    
     new_prices_rows = []
     new_demand = actual_demand.copy()
 
@@ -97,6 +109,53 @@ def adjust_prices_and_demand(actual_demand: pd.DataFrame,
     return new_prices, new_demand
 
 
+# VERSION 2
+# def adjust_prices_and_demand(actual_demand: pd.DataFrame, 
+#                              selling_prices: pd.DataFrame, 
+#                              price_elasticity: pd.DataFrame,
+#                              most_profitable_servers: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+#     new_prices_rows = []
+#     new_demand = actual_demand.copy()
+
+#     for _, row in most_profitable_servers.iterrows():
+#         server_gen = row['server_generation']
+#         latency_sensitivity = row['latency_sensitivity']
+
+#         grouped = actual_demand[actual_demand['server_generation'] == server_gen]
+
+#         for time_step, group in grouped.groupby('time_step'):
+#             new_prices_row = {'time_step': time_step, 'server_generation': server_gen}
+            
+#             for level in ['high', 'medium', 'low']:
+#                 actual = group[level].values[0]
+#                 current_price = selling_prices.loc[server_gen, level]
+#                 elasticity = price_elasticity.loc[server_gen, level]
+
+#                 if level == latency_sensitivity:
+#                     # Calculate new price
+#                     new_price = calculate_new_price(actual, actual, current_price, elasticity)
+#                     new_prices_row[level] = new_price
+
+#                     # Calculate new demand
+#                     new_demand_value = get_new_demand_for_new_price(actual, current_price, new_price, elasticity)
+#                 else:
+#                     # Keep the original price and demand for other sensitivity levels
+#                     new_prices_row[level] = current_price
+#                     new_demand_value = actual
+
+#                 # Update new_demand DataFrame
+#                 new_demand.loc[(new_demand['time_step'] == time_step) & 
+#                                (new_demand['server_generation'] == server_gen), 
+#                                level] = new_demand_value
+
+#             new_prices_rows.append(new_prices_row)
+
+#     # Create new_prices DataFrame from the list of rows
+#     new_prices = pd.DataFrame(new_prices_rows)
+
+#     return new_prices, new_demand
+
+
 def parse_prices(new_prices: pd.DataFrame) -> dict:
     # Melt the DataFrame to convert columns to rows
     melted = pd.melt(new_prices, 
@@ -111,18 +170,21 @@ def parse_prices(new_prices: pd.DataFrame) -> dict:
     return {"pricing_strategy": pricing_strategy}
 
 
-def get_prices_and_demand(actual_demand: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]: 
+def pre_flatten_demand(actual_demand: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]: 
     selling_prices = change_selling_prices_format(SELLING_PRICES)
     elasticity = change_elasticity_format(PRICE_ELASTICITY)
+    # most_profitable_servers = pd.read_csv('data/test_data/most_profitable_servers_by_artem.csv')
     moving_average = calculate_moving_average(actual_demand, WINDOW_SIZE)
 
     new_prices, new_demand = adjust_prices_and_demand(actual_demand, 
-                                                      moving_average, 
                                                       selling_prices, 
-                                                      elasticity)
+                                                      elasticity,
+                                                    #   most_profitable_servers)
+                                                      moving_average)
     pricing_dict = parse_prices(new_prices)
 
     return pricing_dict, new_demand
+
 
 def main():
     print(f'[TEST MODE]: Seed used: {TEST_SEED}; Window size: {WINDOW_SIZE}')
@@ -130,7 +192,7 @@ def main():
     np.random.seed(TEST_SEED)
 
     actual_demand = get_actual_demand(DEMAND)
-    pricing_dict, new_demand = get_prices_and_demand(actual_demand)
+    pricing_dict, new_demand = pre_flatten_demand(actual_demand)
 
     # GREEDY_PROFIT_V2
     results = greedy_profit_algorithm(new_demand, pricing_dict, 0, float(8))
@@ -146,7 +208,8 @@ def main():
     save_results_as_actions(file_path, results)
 
     # with open('demnad_flattening/pre_flattening_pricing_strategy.json', 'w') as f:
-    #     json.dump(prices_dict, f, indent=2)
+    #     json.dump(pricing_dict, f, indent=2)
+
 
 if __name__ == "__main__":
     main()

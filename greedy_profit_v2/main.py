@@ -1,5 +1,6 @@
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 
@@ -11,6 +12,8 @@ from greedy_profit_v2.greedy_profit_algorithm import greedy_profit_algorithm
 from greedy_profit_v2.results import save_results_as_actions
 from seeds import known_seeds
 from evaluation import get_actual_demand
+
+from demand_flattening.pre_flattening import pre_flatten_demand
 
 
 def get_solution(enable_post_demand_flattening=False):
@@ -28,7 +31,8 @@ def get_solution(enable_post_demand_flattening=False):
         actual_demand = get_actual_demand(demand)
 
         # CALL YOUR APPROACH HERE
-        results = greedy_profit_algorithm(actual_demand, 0, float(8))
+        pricing_dict, new_demand = pre_flatten_demand(actual_demand)
+        results = greedy_profit_algorithm(new_demand, pricing_dict, 0, float(8))
 
         # Extract the directory path from the file path
         file_path = f'output/solutions/{seed}.json'

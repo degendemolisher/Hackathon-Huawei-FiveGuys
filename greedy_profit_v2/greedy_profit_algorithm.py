@@ -6,10 +6,10 @@ from greedy_profit_v2.demand_ranges import get_demand_ranges, merge_close_ranges
 from greedy_profit_v2.remaining_slot_decrement_algorithm import remaining_slots_decrement_algorithm
 
 
-def greedy_profit_algorithm(actual_demand: pd.DataFrame, quantile: float, merge_threshold_multiplier: float = 4):
+def greedy_profit_algorithm(actual_demand: pd.DataFrame, pricing: dict, quantile: float, merge_threshold_multiplier: float = 4):
     results = {
         "fleet": [],
-        "pricing_strategy": []  # TODO: Add logic to populate pricing strategy
+        "pricing_strategy": pricing['pricing_strategy']
     }
 
     # 1) Initialise a DataFrame that tracks the remaining slots of each datacentre at each time step
