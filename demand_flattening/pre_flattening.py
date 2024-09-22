@@ -17,6 +17,9 @@ DEMAND, DATACENTERS, SERVERS, SELLING_PRICES, PRICE_ELASTICITY = load_problem_da
 TEST_SEED = 1097
 WINDOW_SIZE = 12
 
+def calculate_optimal_dP(e: float) -> float:
+    dP = -(e + 1) / e
+    return dP * 0.05
 
 def calculate_moving_average(actual_demand: pd.DataFrame, 
                              window_size: int = WINDOW_SIZE) -> pd.DataFrame:
@@ -48,7 +51,7 @@ def calculate_new_price(d0, d1, p0, e):
         return p0
     
     delta_d = (d1 - d0) / d0
-    delta_p = delta_d / e
+    delta_p = (delta_d / e) * calculate_optimal_dP(e)
     p1 = p0 * (1 + delta_p)
 
     # Ensure price is non-negative

@@ -24,7 +24,7 @@ class DatacenterSlotTracker():
         print(f'Processing {self.json_filename}')
         json_file_path = os.path.join(self.solution_json_dir, self.json_filename)
         with open(json_file_path, 'r') as f:
-            actions = json.load(f)
+            actions = json.load(f)['fleet']
             for action in actions:
                 dc_id = action['datacenter_id']
                 time_step = action['time_step']

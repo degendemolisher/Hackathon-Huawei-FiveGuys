@@ -161,7 +161,7 @@ class DemandTracker():
                 else:
                     for dc in dc_to_latency[latency]:
                         capacity_data.extend(self.current_server_capacity[dc][server])
-                ax.plot(range(len(capacity_data)), capacity_data, label='Capacity')
+                ax.plot(range(len(capacity_data)), capacity_data, label='Fulfilled')
 
                 # Extract and plot the new demand data
                 new_demand_data = self.demand_new[server][latency]
