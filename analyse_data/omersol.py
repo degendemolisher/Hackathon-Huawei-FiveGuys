@@ -43,24 +43,19 @@ def get_my_solution(d):
 
     prices_step_size = 168
     step_size = 6
-    # prices = big.simulated_annealing(10, demand=ddd, prices_step_size=prices_step_size, step_size=12)
 
-    # rng = np.random.default_rng()
-    # prices = big.generate_prices(rng, prices_step_size)
-
-    result_df, profit = max_profit(ddd, prices=prices, prices_step_size=prices_step_size, step_size=step_size)
+    result_df = max_profit(ddd, step_size=step_size)
     #result_df.to_csv('out2.csv', index=True)
     buy_array = big.process_dataframe(result_df, step_size=step_size)
     # print(buy_array)
     #buy_array.extend(big.buy_all(result_df2))
     #buy_array = buy_array.flatten()
-    pricing_strategy = big.get_pricing_strat_df(prices, prices_step_size)
-    # pricing_strategy = pd.DataFrame(data=[{
-	# 					"time_step": 1,
-	# 					"latency_sensitivity": "low",
-	# 					"server_generation": "CPU.S1",
-	# 					"price": 10
-	# 					}],columns=["time_step"])
+    pricing_strategy = pd.DataFrame(data=[{
+						"time_step": 1,
+						"latency_sensitivity": "low",
+						"server_generation": "CPU.S1",
+						"price": 10
+						}],columns=["time_step"])
     return buy_array, pricing_strategy
 
 

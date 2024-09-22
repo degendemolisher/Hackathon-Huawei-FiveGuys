@@ -334,49 +334,13 @@ def max_profit(demand, ls=[] ,prices=[], prices_step_size=12, step_size=6, START
     # solver = pywraplp.Solver.CreateSolver("SAT")
     solver = cp_model.CpModel()
 
-    prices2 = []
-    if(len(ls) != 0):
-        lat = ls[0]
-        for i in range(3):
-            dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == num_to_lat[i]]["selling_price"].to_numpy()
-            if(i == lat):
-                prices2.append(prices)
-                continue
-            lat_prices = []
-            for j in range(7):
-                lat_prices.append(np.repeat(dc_selling_prices[j],int(168/prices_step_size)))
-            prices2.append(lat_prices)
-        prices = np.array(prices2)
-        prices = np.reshape(prices, (3, 7, int(TIMESTEPS2/prices_step_size)))
-
-    new_demand = np.empty((TIMESTEPS2, 3, 7),dtype=np.int32)
-    for latency in range(3):
-        dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == num_to_lat[latency]]["selling_price"].to_numpy()
-        dc_id = index_to_dcid[latency]
-        sens_demand = demand2[demand2["datacenter_id"] == dc_id].drop_duplicates(subset="time_step")
-        #filter for the timesteps we need
-        sens_demand = sens_demand[sens_demand["time_step"].isin(np.arange(START_STEP2, TIMESTEPS2+START_STEP2))]
-        sens_demand = sens_demand.drop(columns=["time_step","datacenter_id","latency_sensitivity","cost_of_energy","slots_capacity"]).to_numpy().astype("int")
-
-        latency_elasticity = elasticity[elasticity["latency_sensitivity"] == num_to_lat[latency]]
-        for servergen in range(7):
-            servergen_elasticity = latency_elasticity[latency_elasticity["server_generation"] == num_to_sgen[servergen]]["elasticity"].iloc[0]
-            for timestep in range(TIMESTEPS2):
-                badaboom = int(timestep/prices_step_size)
-                #delta price
-                dP = (prices[latency, servergen, badaboom]-dc_selling_prices[servergen])/dc_selling_prices[servergen]
-                # if(timestep==0):
-                #     print(prices[latency, servergen, badaboom])
-                #     print(purchase_prices[servergen])
-                #     print(dP)
-                #calc delta demand
-                dD = dP * servergen_elasticity
-                #calc new demand
-                ts_demand = sens_demand[timestep][servergen] * (1 + dD)
-                if(ts_demand<0):
-                    ts_demand = 0
-                ts_demand = int(ts_demand)
-                new_demand[timestep, latency, servergen] = ts_demand
+    # new_demand = []
+    # delta_p = []
+    # for latency in range(3):
+    #     for timestep in range(TIMESTEPS2):
+    #         for servergen in range(7):
+    #             dp = (prices[timestep, latency, servergen]-purchase_prices[servergen])/purchase_prices[servergen]
+    #             delta_p.append(dp)
 
     #SELF NOTE: PRICES WILL BE AN ARRAY OF SHAPE:LATENCY,SERVERGEN,TIMESTEPS CAN HAVE STEP_SIZE ASWELL
 
