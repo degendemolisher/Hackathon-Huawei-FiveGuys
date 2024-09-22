@@ -165,7 +165,7 @@ class DemandTracker():
 
                 # Extract and plot the new demand data
                 new_demand_data = self.demand_new[server][latency]
-                ax.plot(range(len(new_demand_data)), new_demand_data, label='New Demand')
+                ax.plot(range(1, len(new_demand_data) + 1), new_demand_data, label='New Demand', linestyle='dashed')
             
                 ax.set_title(f'Demand and Capacity for {server} ({latency} latency) Over Time')
                 ax.set_xlabel('Time Step')
@@ -191,6 +191,6 @@ for seed in seeds: # type: ignore
     np.random.seed(seed)
     print(f"Seed: {seed}")
     actual_demand = get_actual_demand(pd.read_csv('./data/demand.csv')) 
-    tracker = DemandTracker('output/flattened/', f'{seed}.json', actual_demand)
+    tracker = DemandTracker('output/solutions', f'{seed}.json', actual_demand)
     tracker.run()
     # break
