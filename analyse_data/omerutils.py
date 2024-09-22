@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from seeds import known_seeds
 from utils import save_solution
+from scipy.optimize import basinhopping
+from max_profit2 import max_profit
+from functools import partial
 import json
 
 class Big:
@@ -9,6 +12,8 @@ class Big:
         self.fleet = pd.DataFrame(columns=["time_step", "datacenter_id", "server_generation", "server_id"])
         self.server_generations = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4', 'GPU.S1', 'GPU.S2', 'GPU.S3']
         self.latencies = ["low","medium","high"]
+        self.num_to_sgen = {i:self.server_generations[i] for i in range(7)}
+        self.num_to_lat = {0:"low", 1:"medium", 2:"high"}
         self.server_id = 0
     
     def increment_id(self):
@@ -86,6 +91,71 @@ class Big:
                     bought = self.buy(i, datacenter, servergen, number)
                     buy_array.extend(bought)
         return buy_array
+
+    def generate_prices(self, rng, prices_step_size):
+        selling_prices = pd.read_csv("../data/selling_prices.csv")
+        lat_prices = []
+        for i in range(3):
+            sgen_prices = []
+            for j in range(7):
+                mask = (selling_prices["server_generation"] == self.num_to_sgen[j]) & (selling_prices["latency_sensitivity"] == self.num_to_lat[i])
+                default_price = selling_prices[mask]["selling_price"].iloc[0]
+                sgen_price = rng.uniform(default_price*1,default_price*1,int(168/prices_step_size))
+                sgen_prices.append(sgen_price)
+            lat_prices.append(np.array(sgen_prices))
+        return np.array(lat_prices)
+    
+    def generate_bounds(self, step_size):
+        selling_prices = pd.read_csv("../data/selling_prices.csv")
+        lat_prices = []
+        for i in range(3):
+            sgen_prices = []
+            for j in range(7):
+                mask = (selling_prices["server_generation"] == self.num_to_sgen[j]) & (selling_prices["latency_sensitivity"] == self.num_to_lat[i])
+                default_price = selling_prices[mask]["selling_price"].iloc[0]
+                lower_bound = int(default_price*0.5)
+                upper_bound = int(default_price*1.5)
+                sgen_price = np.repeat([lower_bound, upper_bound],int(168/step_size))
+                sgen_prices.append(sgen_price)
+            lat_prices.append(np.array(sgen_prices))
+        return np.array(lat_prices)
+    
+    def wrapper_function(self, x, demand, ls, prices_step_size, step_size, return_df, negative):
+        return max_profit(prices=x, demand=demand, ls=ls, prices_step_size=prices_step_size, step_size=step_size, return_df=return_df, negative=negative)
+
+    def simulated_annealing(self, n_iterations, demand, prices_step_size=24, step_size=12):
+        rng = np.random.default_rng()
+        bounds = self.generate_bounds(prices_step_size)
+        very_best = []
+        best = self.generate_prices(rng, prices_step_size)
+        # best_profit = max_profit(demand, prices=best, prices_step_size=prices_step_size, step_size=step_size, return_df=False)
+        for i in range(3):
+            ls = [i]
+            best_profit = max_profit(demand, ls=[i], prices=best[i], prices_step_size=prices_step_size, step_size=step_size, return_df=False)
+            for k in range(n_iterations):
+                curr = self.generate_prices(rng, prices_step_size)
+                curr_profit = max_profit(demand, ls=[i], prices=curr[i], prices_step_size=prices_step_size, step_size=step_size, return_df=False)
+                if(curr_profit>best_profit):
+                    best_profit = curr_profit
+                    best[i] = curr[i]
+                # fixed_custom_function = partial(self.wrapper_function, demand = demand, ls=ls, prices_step_size=prices_step_size, step_size=step_size, return_df=False, negative=True)
+                # ret = basinhopping(fixed_custom_function, best[i,j], niter=10, stepsize=5)
+        return best
+
+    def get_pricing_strat_df(self, prices, prices_step_size):
+        pricing_strat = []
+        for latency in range(3):
+            for servergen in range(7):
+                lat = self.num_to_lat[latency]
+                sgen = self.num_to_sgen[servergen]
+                for ts in range(int(168/prices_step_size)):
+                    timestep = ts*prices_step_size
+                    price = prices[latency,servergen,ts]
+                    prices_dict = {"time_step":timestep, "latency_sensitivity":lat, "server_generation":sgen, "price":price}
+                    pricing_strat.append(prices_dict)
+        pricing_strategy = pd.DataFrame(data=pricing_strat)
+        return pricing_strategy
+
 
     def csv_format_demand(self, demand):
         columns = ["time_step","latency_sensitivity","CPU.S1","CPU.S2","CPU.S3","CPU.S4"

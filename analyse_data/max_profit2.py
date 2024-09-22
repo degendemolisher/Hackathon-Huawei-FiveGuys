@@ -2,16 +2,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from scipy.stats import truncweibull_min
 #import pyspark as spark
 
 #read contents of csv into variables
 datacenters = pd.read_csv("../data/datacenters.csv")
 selling_prices = pd.read_csv("../data/selling_prices.csv")
 servers = pd.read_csv("../data/servers.csv")
+elasticity = pd.read_csv("data/price_elasticity_of_demand.csv")
 
 # %%
 index_to_dcid = {0:"DC1",1:"DC2",2:"DC3",3:"DC4"}
 generations = ['CPU.S1', 'CPU.S2', 'CPU.S3', 'CPU.S4', 'GPU.S1', 'GPU.S2', 'GPU.S3']
+num_to_sgen = {i:generations[i] for i in range(7)}
+num_to_lat = {0:"low", 1:"medium", 2:"high"}
 
 #note demand_met is essentially min(zf, D)
 columns = ['time_step', 'datacenter_id',
@@ -129,12 +133,11 @@ maintenance_cost_array = np.empty((96,7))
 for i in range(7):
     maintenance_cost_array[:,i] = (1+ ts_array/96 * np.log2(ts_array/96)) * maint_prices[i]
 
-def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
+def profit(demand, x, z, y, prices, cumsum_x, step_size, TIMESTEPS, START_STEP):
     chunks = int(TIMESTEPS/step_size)
     x = np.reshape(x,(chunks, 4, 7))
     y = np.reshape(y,(TIMESTEPS,3,7))
     #x = shape(TIMESTEPS,DATACENTER,SERVERGEN)
-    all_lifespanner = []
     revenues = []
     costs = []
     #for each datacenter
@@ -212,7 +215,7 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
         #get generated revenue at each timestep
         dc_id = index_to_dcid[datacenter]
         lat_sens = demand[demand["datacenter_id"] == dc_id]["latency_sensitivity"].iloc[0]
-        dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == lat_sens]["selling_price"].to_numpy()
+        # dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == lat_sens]["selling_price"].to_numpy()
         dc_revenues = []
         max_servers = int(96/step_size)
 
@@ -220,27 +223,16 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
         #skip dc4 as calc for dc3 already includes the info for dc4
         if(datacenter != 3):
             for timestep in range(TIMESTEPS):
+                p_step = int(TIMESTEPS/prices.shape[2])
+                price_pos = int(timestep/p_step)
                 ts_servers = x_minus_z_arr[timestep, datacenter].copy()
                 chunk = int(timestep/step_size)
-                curr_max = min(max_in_existance, chunk+1)
-                curr_max2 = min(max_in_existance-1, chunk)
-                if(timestep>=step_size):
-                    calcs = []
-                    for servergen in range(7):
-                        calc = dc_selling_prices[servergen] * curr_max #timestep-i*step_size
-                        servers_lifespan = []
-                        for i in range(curr_max2):
-                            servers_lifespan.append(ts_servers[servergen][i] * mult_array[curr_max2-i])
-                        calc = calc * np.sum(servers_lifespan)-(np.sum(servers_lifespan)*curr_max)
-                        calcs.append(calc)
-                    dc_lifespanner.append(np.sum(calcs))
                 supply = y[timestep, datacenter]
                 revenue = []
                 for j in range(7):
-                    revenue.append(supply[j]*dc_selling_prices[j])
+                    revenue.append(supply[j]*prices[datacenter][j][price_pos])
                 revenue = np.sum(revenue)
                 dc_revenues.append(revenue)
-            all_lifespanner.append(dc_lifespanner)
             revenues.append(dc_revenues)
         #calc energycost for all servergens at the datacenter
         energy_costs = server_energies * datacenters[datacenters["datacenter_id"] == dc_id]["cost_of_energy"].to_numpy()
@@ -259,8 +251,6 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
             if(step==0):
                 #get cost of new servers
                 new_cost = ts_servers[:, new_servers]*(purchase_prices+energy_costs+maintenance_cost_array[0])
-                #factor in lifespan
-                # new_cost *=  1/96
                 new_cost = np.sum(new_cost)
 
                 #calc energy + maintenance cost
@@ -305,26 +295,26 @@ def profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
                 maint_cost = np.sum(maint_cost)
                 timestep_costs.append(maint_cost)
         costs.append(timestep_costs)
-        
+    
 
     #after all of the profits and costs have been calculated for all the datacenters at each timestep,
     #get sum of costs for the datacenters and the sum of profits for all datacenters at each timestep
-    lifespan_sum = np.sum(all_lifespanner, axis=0)
     costs_sum = np.sum(costs, axis=0)
     revenue_sum = np.sum(revenues, axis=0)
-    return revenue_sum, costs_sum, lifespan_sum
+    return revenue_sum, costs_sum
 
-def objective_func(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP):
-    revenues, costs, lifespan = profit(demand, x, z, y, cumsum_x, step_size, TIMESTEPS, START_STEP)
+def objective_func(demand, x, z, y, prices, cumsum_x, step_size, TIMESTEPS, START_STEP):
+    revenues, costs = profit(demand, x, z, y, prices, cumsum_x, step_size, TIMESTEPS, START_STEP)
     #get profit at each timestep
     profit_arr = []
     for i in range(TIMESTEPS):
-        # if(i>=step_size):
-        #     ts_profit = (lifespan[i-step_size]+(revenues[i]-costs[i]))*(1/96)
-        # else:
-        #     ts_profit = (revenues[i]-costs[i])*(i/96)
         ts_profit = revenues[i]-costs[i]
         profit_arr.append(ts_profit)
+    # print(profit_arr[0])
+    # print()
+    # print(profit_arr[100])
+    # print()
+    # print(profit_arr[141])
     Objective = np.sum(profit_arr)
     return Objective
 
@@ -333,7 +323,7 @@ from ortools.linear_solver import pywraplp
 from ortools.constraint_solver import pywrapcp
 from ortools.sat.python import cp_model
 
-def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=6, START_STEP=1, TIMESTEPS=168):
+def max_profit(demand, ls=[] ,prices=[], prices_step_size=12, step_size=6, START_STEP=1, TIMESTEPS=168, return_df=True, negative=False):
     demand2 = demand.merge(datacenters, on="latency_sensitivity", how="left")
     START_STEP2 = START_STEP
     TIMESTEPS2 = TIMESTEPS
@@ -344,15 +334,51 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
     # solver = pywraplp.Solver.CreateSolver("SAT")
     solver = cp_model.CpModel()
 
-    new_demand = []
-    delta_p = []
-    for latency in range(3):
-        for timestep in range(TIMESTEPS2):
-            for servergen in range(7):
-                dp = (prices[timestep, latency, servergen]-purchase_prices[servergen])/purchase_prices[servergen]
-                delta_p.append(dp)
+    prices2 = []
+    if(len(ls) != 0):
+        lat = ls[0]
+        for i in range(3):
+            dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == num_to_lat[i]]["selling_price"].to_numpy()
+            if(i == lat):
+                prices2.append(prices)
+                continue
+            lat_prices = []
+            for j in range(7):
+                lat_prices.append(np.repeat(dc_selling_prices[j],int(168/prices_step_size)))
+            prices2.append(lat_prices)
+        prices = np.array(prices2)
+        prices = np.reshape(prices, (3, 7, int(TIMESTEPS2/prices_step_size)))
 
-    #SELF NOTE: PRICES WILL BE AN ARRAY OF SHAPE:TIMESTEPS,LATENCY,SERVERGEN (same as y) CAN HAVE STEP_SIZE ASWELL
+    new_demand = np.empty((TIMESTEPS2, 3, 7),dtype=np.int32)
+    for latency in range(3):
+        dc_selling_prices = selling_prices[selling_prices["latency_sensitivity"] == num_to_lat[latency]]["selling_price"].to_numpy()
+        dc_id = index_to_dcid[latency]
+        sens_demand = demand2[demand2["datacenter_id"] == dc_id].drop_duplicates(subset="time_step")
+        #filter for the timesteps we need
+        sens_demand = sens_demand[sens_demand["time_step"].isin(np.arange(START_STEP2, TIMESTEPS2+START_STEP2))]
+        sens_demand = sens_demand.drop(columns=["time_step","datacenter_id","latency_sensitivity","cost_of_energy","slots_capacity"]).to_numpy().astype("int")
+
+        latency_elasticity = elasticity[elasticity["latency_sensitivity"] == num_to_lat[latency]]
+        for servergen in range(7):
+            servergen_elasticity = latency_elasticity[latency_elasticity["server_generation"] == num_to_sgen[servergen]]["elasticity"].iloc[0]
+            for timestep in range(TIMESTEPS2):
+                badaboom = int(timestep/prices_step_size)
+                #delta price
+                dP = (prices[latency, servergen, badaboom]-dc_selling_prices[servergen])/dc_selling_prices[servergen]
+                # if(timestep==0):
+                #     print(prices[latency, servergen, badaboom])
+                #     print(purchase_prices[servergen])
+                #     print(dP)
+                #calc delta demand
+                dD = dP * servergen_elasticity
+                #calc new demand
+                ts_demand = sens_demand[timestep][servergen] * (1 + dD)
+                if(ts_demand<0):
+                    ts_demand = 0
+                ts_demand = int(ts_demand)
+                new_demand[timestep, latency, servergen] = ts_demand
+
+    #SELF NOTE: PRICES WILL BE AN ARRAY OF SHAPE:LATENCY,SERVERGEN,TIMESTEPS CAN HAVE STEP_SIZE ASWELL
 
     # Variables
     # x is the bought servergens at each timestep chunk/checkpoint
@@ -394,12 +420,12 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
             a=0
             #generate cpu servers
             for j in range(4):
-                y.append(solver.NewIntVar(0, int(dc_cap[k]/2)*capacity[a], f'y{c}'))
+                y.append(solver.NewIntVar(0, int(dc_cap[k]/2)*capacity[a]*10, f'y{c}'))
                 a+=1
                 c+=1
             #generate gpu servers
             for j in range(3):
-                y.append(solver.NewIntVar(0, int(dc_cap[k]/4)*capacity[a], f'y{c}'))
+                y.append(solver.NewIntVar(0, int(dc_cap[k]/4)*capacity[a]*10, f'y{c}'))
                 a+=1
                 c+=1
 
@@ -505,16 +531,7 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
                         x_minus_z_arr[timestep][datacenter][servergen][chunk-adder] = ts_x - discard
                     else:
                         x_minus_z_arr[timestep][datacenter][servergen][chunk] = ts_x - discard
-    
-    #init the b binding variables
-    # for chunk in range(chunks):
-    #     curr_max = min(max_in_existance, chunk+1)
-    #     for datacenter in range(4):
-    #         for servergen in range(7):
-    #             for server in range(curr_max):
-    #                 b.append(solver.NewBoolVar(f"b{c}"))
-
-
+ 
     #below code gives an array of the cumsum with lifespan at each timestep for each server factored in
     cumsum_w_lifespan = np.reshape(np.array(x), (chunks, 28))
     dc1_cumsum = cumsum_w_lifespan[:, 0:7]
@@ -566,10 +583,6 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
     #     counter+=1
 
     for timestep in range(TIMESTEPS2):
-        disc_chunk = min(int(timestep/24)-1,5)
-        no_expired = max(int((timestep-(96-step_size))/step_size),0)
-        chunk = int(timestep/step_size)
-        modder = int(96/step_size)
         if(timestep%step_size==0):
             for datacenter in range(4):
                 #datacenter cap constraint
@@ -584,16 +597,11 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
     # print(re_z1_cumsum[5][0][0][0])
     for datacenter in range(4):
         dc_id = index_to_dcid[datacenter]
-        sens_demand = demand2[demand2["datacenter_id"] == dc_id].drop_duplicates(subset="time_step")
-        #filter for the timesteps we need
-        sens_demand = sens_demand[sens_demand["time_step"].isin(np.arange(START_STEP2, TIMESTEPS2+START_STEP2))]
-        sens_demand = sens_demand.drop(columns=["time_step","datacenter_id","latency_sensitivity","cost_of_energy","slots_capacity"]).to_numpy().astype("int")
-        sd_max = np.reshape(sens_demand,(chunks,step_size,7))
-        sd_max = np.max(sd_max, axis=1)
         for timestep in range(TIMESTEPS2):
             disc_chunk = min(int(timestep/24)-1,5)
             no_expired = max(int((timestep-(96-step_size))/step_size),0)
             chunk = int(timestep/step_size)
+            failure_rate = 1 - truncweibull_min.rvs(0.3, 0.05, 0.1, size=1).item()
             if(timestep>=24):
                 if(datacenter != 3):
                     discards_dc4 = np.sum(re_z1_cumsum[disc_chunk,no_expired:chunk,3],axis=0)
@@ -602,30 +610,45 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
                         index = timestep*21+datacenter*7+servergen
                         if(datacenter == 2):
                             #demand met constraint
-                            x_minus_z_dc3 = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-                            x_minus_z_dc4 = ls_cumsum[datacenter+1][timestep][servergen]-discards_dc4[servergen]
-                            solver.Add(y[index] <= x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen])
-                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                            # x_minus_z_dc3 = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
+                            # x_minus_z_dc4 = ls_cumsum[datacenter+1][timestep][servergen]-discards_dc4[servergen]
+                            # solver.Add(y[index] <= x_minus_z_dc3*capacity[servergen]+x_minus_z_dc4*capacity[servergen])
+                            # solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
+
+                            x_minus_z_dc3 = np.sum(x_minus_z_arr[timestep,datacenter, servergen])
+                            x_minus_z_dc4 = np.sum(x_minus_z_arr[timestep,datacenter+1, servergen])
+                            solver.Add(y[index] <= x_minus_z_dc3*int(capacity[servergen]*failure_rate)+x_minus_z_dc4*int(capacity[servergen]*failure_rate))
+                            solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
                         else:
                             #demand met constraint
-                            x_minus_z = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
-                            #dc(xa-za)*cap<=demand
-                            solver.Add(y[index] <= x_minus_z*capacity[servergen])
-                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                            # x_minus_z = ls_cumsum[datacenter][timestep][servergen]-discards[servergen]
+                            # #dc(xa-za)*cap<=demand
+                            # solver.Add(y[index] <= x_minus_z*capacity[servergen])
+                            # solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
+                            x_minus_z = np.sum(x_minus_z_arr[timestep,datacenter, servergen])
+                            solver.Add(y[index] <= x_minus_z*int(capacity[servergen]*failure_rate))
+                            solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
             else:
                 if(datacenter != 3):
                     for servergen in range(7):
                         index = timestep*21+datacenter*7+servergen
                         if(datacenter == 2):
                             #demand met constraint
-                            x_dc3 = ls_cumsum[datacenter][timestep][servergen]
-                            x_dc4 = ls_cumsum[datacenter+1][timestep][servergen]
-                            solver.Add(y[index] <= x_dc3*capacity[servergen]+x_dc4*capacity[servergen])
-                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                            # x_dc3 = ls_cumsum[datacenter][timestep][servergen]
+                            # x_dc4 = ls_cumsum[datacenter+1][timestep][servergen]
+                            # solver.Add(y[index] <= x_dc3*capacity[servergen]+x_dc4*capacity[servergen])
+                            # solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
+                            x_minus_z_dc3 = np.sum(x_minus_z_arr[timestep,datacenter, servergen])
+                            x_minus_z_dc4 = np.sum(x_minus_z_arr[timestep,datacenter+1, servergen])
+                            solver.Add(y[index] <= x_minus_z_dc3*int(capacity[servergen]*failure_rate)+x_minus_z_dc4*int(capacity[servergen]*failure_rate))
+                            solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
                         else:
                             #demand met constraint
-                            solver.Add(y[index] <= ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] )
-                            solver.Add(y[index] <= sens_demand[timestep][servergen])
+                            # solver.Add(y[index] <= ls_cumsum[datacenter][timestep][servergen]*capacity[servergen] )
+                            # solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
+                            x_minus_z = np.sum(x_minus_z_arr[timestep,  datacenter, servergen])
+                            solver.Add(y[index] <= x_minus_z*int(capacity[servergen]*failure_rate))
+                            solver.Add(y[index] <= new_demand[timestep][datacenter][servergen])
 
 
             # if(timestep%step_size==0):
@@ -654,34 +677,12 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
                     s = x_minus_z_arr[timestep][datacenter][servergen][server]
                     solver.Add(s >= 0)
 
-    
-    # prev_indexes = 0
-    # for chunk in range(chunks):
-    #     curr_max = min(max_in_existance, chunk+1)
-    #     # rough = np.arange(1,curr_max)*rough
-    #     for datacenter in range(4):
-    #         for servergen in range(7):
-    #             for server in range(curr_max):
-    #                 index = prev_indexes + datacenter*7*curr_max + servergen*curr_max+server
-    #                 # print(index)
-    #                 s = x_minus_z_arr[chunk][datacenter][servergen][server]
-    #                 solver.Add(s > 0).only_enforce_if(b[index])
-    #                 solver.Add(s == 0).only_enforce_if(~b[index])
-    #     prev_indexes += datacenter*7*curr_max + servergen*curr_max+server
-    
-    # profit_arr, cost_arr = profit(demand2, x, z, y, ls_cumsum, step_size, TIMESTEPS2, START_STEP)
-    # for timestep in range(TIMESTEPS2):
-    #     curr_chunk = int(timestep/step_size)
-    #     for datacenter in range(4):
-    #         for servergen in range(7):
-
-
     #print("Number of constraints =", solver.NumConstraints())
 
     #solver.parameters.max_time_in_seconds = 10.0
 
     # Objective
-    solver.Maximize(objective_func(demand2, x, z, y, ls_cumsum, step_size, TIMESTEPS2, START_STEP))
+    solver.Maximize(objective_func(demand2, x, z, y, prices, ls_cumsum, step_size, TIMESTEPS2, START_STEP))
     
     # Solve
     solver2 = cp_model.CpSolver()
@@ -691,16 +692,61 @@ def max_profit(demand, elasticity=[], prices=[], prices_step_size=12, step_size=
         print('Total value =', make_readable(solver2.ObjectiveValue()))
     else:
         print('The problem does not have an optimal solution.')
-
-    if status == cp_model.OPTIMAL:
-        result_df = result_to_df(x,z,step_size,START_STEP2,TIMESTEPS2, solver2)
-    else:
         return "no solution"
     
-    return result_df
+    if(return_df):
+        result_df = result_to_df(x,z,step_size,START_STEP2,TIMESTEPS2, solver2)
+        return result_df, solver2.ObjectiveValue()
+    else:
+        if(negative):
+            return -1* solver2.ObjectiveValue()
+        else:
+            return solver2.ObjectiveValue()
 
 # %%
-# result_df = max_profit(pd.read_csv("../data/demand.csv"))
+# default =[[[  10,   10,   10,   10,   10,   10,   10,   10,   10,   10,   10,
+#           10,   10,   10],
+#        [  10,   10,   10,   10,   10,   10,   10,   10,   10,   10,   10,
+#           10,   10,   10],
+#        [  11,   11,   11,   11,   11,   11,   11,   11,   11,   11,   11,
+#           11,   11,   11],
+#        [  12,   12,   12,   12,   12,   12,   12,   12,   12,   12,   12,
+#           12,   12,   12],
+#        [1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500,
+#         1500, 1500, 1500],
+#        [1600, 1600, 1600, 1600, 1600, 1600, 1600, 1600, 1600, 1600, 1600,
+#         1600, 1600, 1600],
+#        [2150, 2150, 2150, 2150, 2150, 2150, 2150, 2150, 2150, 2150, 2150,
+#         2150, 2150, 2150]],[[  15,   15,   15,   15,   15,   15,   15,   15,   15,   15,   15,
+#           15,   15,   15],
+#        [  15,   15,   15,   15,   15,   15,   15,   15,   15,   15,   15,
+#           15,   15,   15],
+#        [  16,   16,   16,   16,   16,   16,   16,   16,   16,   16,   16,
+#           16,   16,   16],
+#        [  18,   18,   18,   18,   18,   18,   18,   18,   18,   18,   18,
+#           18,   18,   18],
+#        [1680, 1680, 1680, 1680, 1680, 1680, 1680, 1680, 1680, 1680, 1680,
+#         1680, 1680, 1680],
+#        [1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800, 1800,
+#         1800, 1800, 1800],
+#        [2450, 2450, 2450, 2450, 2450, 2450, 2450, 2450, 2450, 2450, 2450,
+#         2450, 2450, 2450]], [[  25,   25,   25,   25,   25,   25,   25,   25,   25,   25,   25,
+#           25,   25,   25],
+#        [  25,   25,   25,   25,   25,   25,   25,   25,   25,   25,   25,
+#           25,   25,   25],
+#        [  27,   27,   27,   27,   27,   27,   27,   27,   27,   27,   27,
+#           27,   27,   27],
+#        [  30,   30,   30,   30,   30,   30,   30,   30,   30,   30,   30,
+#           30,   30,   30],
+#        [1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875,
+#         1875, 1875, 1875],
+#        [2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000,
+#         2000, 2000, 2000],
+#        [2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700,
+#         2700, 2700, 2700]]]
+
+# default = np.array(default)
+# result_df, profit = max_profit(pd.read_csv("../data/demand.csv"), prices=default, prices_step_size=12)
 # print(result_df)
 # result_df.to_csv('out2.csv', index=True)
 # valid = verify_solution_integrity(result_df, True)
