@@ -1,4 +1,4 @@
-# Huawei Hackathon - Ireland Tech Arena 2024 Phase 1
+# Huawei Hackathon - Ireland Tech Arena 2024
 
 ## Team FiveGuys
 
